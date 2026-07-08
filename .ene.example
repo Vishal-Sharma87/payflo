@@ -1,0 +1,97 @@
+# ============================================================================
+# PayFlo Environment Configuration
+#
+# Copy this file to ".env" before running the project.
+#
+# This file is consumed by:
+#   • Docker Compose
+#   • Spring Boot (application.yml)
+#   • Startup scripts
+# ============================================================================
+
+# --------------------------------------------------
+# Application
+# --------------------------------------------------
+
+# Spring Boot application name.
+APPLICATION_NAME=payflo
+
+
+# --------------------------------------------------
+# MySQL
+# --------------------------------------------------
+
+# JDBC URL used by Spring Boot to connect to MySQL.
+MYSQL_URL=jdbc:mysql://localhost:3306/payflo
+
+# Database automatically created when the MySQL container starts.
+MYSQL_DATABASE=payflo
+
+# MySQL user used by the application.
+MYSQL_USER=root
+
+# Password for the MySQL user.
+#
+# Docker Compose uses this to initialize MySQL.
+# Spring Boot also uses this to authenticate.
+MYSQL_ROOT_PASSWORD=changeme
+
+
+# --------------------------------------------------
+# Redis
+# --------------------------------------------------
+
+# Redis host.
+REDIS_HOST=localhost
+
+# Redis port.
+REDIS_PORT=6379
+
+
+# --------------------------------------------------
+# Kafka
+# --------------------------------------------------
+
+# Kafka consumer group identifier.
+KAFKA_CONSUMER_GROUP_ID=payflo-group
+
+# Packages trusted for Kafka message deserialization.
+KAFKA_TRUSTED_PACKAGES=com.vishal.payflo.models
+
+# Docker container name used by startup scripts.
+KAFKA_CONTAINER=payflo-kafka
+
+# Unique Kafka cluster identifier.
+# Change only when creating a completely new Kafka cluster.
+KAFKA_CLUSTER_ID=a5ff53ea-345d-4661-bf5e-51b3a696265c
+
+# Kafka broker address used by Spring Boot and startup scripts.
+BOOTSTRAP_SERVER=localhost:9092
+
+
+# --------------------------------------------------
+# Kafka Topic Initialization
+# --------------------------------------------------
+
+# Number of partitions created for each application topic.
+KAFKA_TOPIC_PARTITIONS=3
+
+# Replication factor for created topics.
+# Keep this as 1 for local single-node development.
+KAFKA_TOPIC_REPLICATION_FACTOR=1
+
+
+# --------------------------------------------------
+# JPA / Hibernate
+# --------------------------------------------------
+
+# Schema generation strategy.
+# Common values:
+#   create, create-drop, update, validate, none
+JPA_DDL_AUTO=update
+
+# Print generated SQL statements.
+JPA_SHOW_SQL=true
+
+# Format SQL output for readability.
+HIBERNATE_FORMAT_SQL=true

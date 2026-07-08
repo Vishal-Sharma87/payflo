@@ -1,0 +1,11 @@
+/mvnw text eol=lf
+*.cmd text eol=crlf
+
+# Shell scripts: always LF, never CRLF
+*.sh text eol=lf
+
+# Windows batch files: always CRLF
+*.bat text eol=crlf
+
+# Let git handle everything else automatically
+* text=auto

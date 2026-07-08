@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: ${APPLICATION_NAME:payflo}
+
+  datasource:
+    url: ${MYSQL_URL}
+    username: ${MYSQL_USER}
+    password: ${MYSQL_ROOT_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    show-sql: ${JPA_SHOW_SQL:false}
+    properties:
+      hibernate:
+        format_sql: ${HIBERNATE_FORMAT_SQL:true}
+
+  kafka:
+    bootstrap-servers: ${BOOTSTRAP_SERVER}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP_ID:payflo-group}
+      trusted-packages: ${KAFKA_TRUSTED_PACKAGES:com.vishal.payflo.models}
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
