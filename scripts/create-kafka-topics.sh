@@ -21,10 +21,11 @@ TOPICS=(
   payflo.notification.payment-initiated
   payflo.payment-received
   payflo.notification.payment-completed
-  payflo.payment-timedout
-  payflo.notification.payment-timedout
+  payflo.payment-timed-out
+  payflo.notification.payment-timed-out
   payflo.payment-failed
   payflo.notification.payment-failed
+  payflo.DLT
 )
 
 log()  { echo "[create-kafka-topics] $*"; }

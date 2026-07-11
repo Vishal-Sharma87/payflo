@@ -22,7 +22,7 @@ if "%KAFKA_TOPIC_PARTITIONS%"=="" set "KAFKA_TOPIC_PARTITIONS=3"
 if "%KAFKA_TOPIC_REPLICATION_FACTOR%"=="" set "KAFKA_TOPIC_REPLICATION_FACTOR=1"
 if "%KAFKA_BIN%"=="" set "KAFKA_BIN=/opt/kafka/bin/kafka-topics.sh"
 
-set "TOPICS=payflo.payment-initiated payflo.notification.payment-initiated payflo.payment-received payflo.notification.payment-completed payflo.payment-timedout payflo.notification.payment-timedout payflo.payment-failed payflo.notification.payment-failed"
+set "TOPICS=payflo.payment-initiated payflo.notification.payment-initiated payflo.payment-received payflo.notification.payment-completed payflo.payment-timed-out payflo.notification.payment-timed-out payflo.payment-failed payflo.notification.payment-failed payflo.DLT"
 
 for %%T in (%TOPICS%) do (
     echo [create-kafka-topics] Ensuring topic exists: %%T
