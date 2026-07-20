@@ -1,7 +1,7 @@
 package com.vishal.payflo.consumers;
 
 import com.vishal.payflo.entities.PaymentTransaction;
-import com.vishal.payflo.events.PaymentInitiatedEvent;
+import com.vishal.payflo.kafka.events.PaymentInitiatedEvent;
 import com.vishal.payflo.services.PaymentTransactionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;

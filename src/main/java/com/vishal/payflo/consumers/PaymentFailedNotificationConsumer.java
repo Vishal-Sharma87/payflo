@@ -1,6 +1,6 @@
 package com.vishal.payflo.consumers;
 
-import com.vishal.payflo.events.PaymentFailedNotificationEvent;
+import com.vishal.payflo.kafka.events.PaymentFailedNotificationEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;

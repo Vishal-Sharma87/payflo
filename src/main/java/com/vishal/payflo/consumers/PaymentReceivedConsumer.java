@@ -1,6 +1,6 @@
 package com.vishal.payflo.consumers;
 
-import com.vishal.payflo.events.PaymentReceivedEvent;
+import com.vishal.payflo.kafka.events.PaymentReceivedEvent;
 import com.vishal.payflo.services.PaymentTransactionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
