@@ -9,17 +9,26 @@
 #   • Startup scripts
 # ============================================================================
 
-# --------------------------------------------------
-# Application
-# --------------------------------------------------
+# *************************     Application        *********************
+
 
 # Spring Boot application name.
 APPLICATION_NAME=payflo
 
+# *************************    Transaction Status Check Messages       *********************
 
-# --------------------------------------------------
-# MySQL
-# --------------------------------------------------
+PAYFLO_STATUS_MESSAGE_PROCESSING=Your payment is being processed.
+PAYFLO_STATUS_MESSAGE_COMPLETED=Your payment was completed successfully.
+PAYFLO_STATUS_MESSAGE_FAILED=Your payment failed. Please try again.
+PAYFLO_STATUS_MESSAGE_TIMED_OUT=Your payment timed out. Please try again.
+
+# *************************      Exception-Messages           *********************
+PAYFLO_EXCEPTION_MESSAGE_TRANSACTION_NOT_FOUND=No transaction found for the given transaction ID.
+
+
+
+# *************************      MySQL           *********************
+
 
 # JDBC URL used by Spring Boot to connect to MySQL.
 MYSQL_URL=jdbc:mysql://localhost:3306/payflo
@@ -37,9 +46,8 @@ MYSQL_USER=root
 MYSQL_ROOT_PASSWORD=changeme
 
 
-# --------------------------------------------------
-# Redis
-# --------------------------------------------------
+# *************************      Redis          *********************
+
 
 # Redis host.
 REDIS_HOST=localhost
@@ -48,9 +56,8 @@ REDIS_HOST=localhost
 REDIS_PORT=6379
 
 
-# --------------------------------------------------
-# Kafka
-# --------------------------------------------------
+# *******************      Kafka Configs           *********************
+
 
 # Kafka consumer group identifier.
 KAFKA_CONSUMER_GROUP_ID=payflo-group
@@ -69,10 +76,8 @@ KAFKA_CLUSTER_ID=a5ff53ea-345d-4661-bf5e-51b3a696265c
 BOOTSTRAP_SERVER=localhost:9092
 
 
+# ****************          Kafka topic configs           *********************
 
-# --------------------------------------------------
-# Kafka Topic Initialization
-# --------------------------------------------------
 
 # Number of partitions created for each application topic.
 KAFKA_TOPIC_PARTITIONS=3
@@ -92,9 +97,8 @@ PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_FAILED=payflo.notification.payment-faile
 PAYFLO_KAFKA_TOPIC_DLT=payflo.DLT
 
 
-# --------------------------------------------------
-# JPA / Hibernate
-# --------------------------------------------------
+# *************************     Jpa & Hibernate        *********************
+
 
 # Schema generation strategy.
 # Common values:
