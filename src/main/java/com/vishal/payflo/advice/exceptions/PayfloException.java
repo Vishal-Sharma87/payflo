@@ -5,7 +5,7 @@ import lombok.Getter;
 
 public abstract class PayfloException extends RuntimeException{
     @Getter
-    private ErrorCode errorCode;
+    private final ErrorCode errorCode;
 
     public PayfloException(String message, ErrorCode errorCode){
         super(message);
