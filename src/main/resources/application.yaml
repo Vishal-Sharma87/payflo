@@ -34,3 +34,14 @@ payflo:
       payment-failed: "${PAYFLO_KAFKA_TOPIC_PAYMENT_FAILED}"
       notification-payment-failed: "${PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_FAILED}"
       dlt: "${PAYFLO_KAFKA_TOPIC_DLT}"
+
+  payment-transaction:
+    status-message:
+      processing: "${PAYFLO_STATUS_MESSAGE_PROCESSING}"
+      completed: "${PAYFLO_STATUS_MESSAGE_COMPLETED}"
+      failed: "${PAYFLO_STATUS_MESSAGE_FAILED}"
+      timed-out: "${PAYFLO_STATUS_MESSAGE_TIMED_OUT}"
+
+  exception:
+    message:
+      transaction-not-found: "${PAYFLO_EXCEPTION_MESSAGE_TRANSACTION_NOT_FOUND}"
