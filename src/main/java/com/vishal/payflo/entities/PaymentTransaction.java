@@ -3,7 +3,7 @@ package com.vishal.payflo.entities;
 
 import com.vishal.payflo.enums.PaymentType;
 import com.vishal.payflo.enums.TransactionStatus;
-import com.vishal.payflo.events.PaymentInitiatedEvent;
+import com.vishal.payflo.kafka.events.PaymentInitiatedEvent;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
