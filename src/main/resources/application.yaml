@@ -1,12 +1,10 @@
 spring:
   application:
     name: ${APPLICATION_NAME:payflo}
-
   datasource:
     url: ${MYSQL_URL}
     username: ${MYSQL_USER}
     password: ${MYSQL_ROOT_PASSWORD}
-
   jpa:
     hibernate:
       ddl-auto: ${JPA_DDL_AUTO:update}
@@ -14,14 +12,25 @@ spring:
     properties:
       hibernate:
         format_sql: ${HIBERNATE_FORMAT_SQL:true}
-
   kafka:
     bootstrap-servers: ${BOOTSTRAP_SERVER}
     consumer:
       group-id: ${KAFKA_CONSUMER_GROUP_ID:payflo-group}
-      trusted-packages: ${KAFKA_TRUSTED_PACKAGES:com.vishal.payflo.models}
-
+      trusted-packages: ${KAFKA_TRUSTED_PACKAGES:com.vishal.payflo.kafka.events}
   data:
     redis:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT}
+
+payflo:
+  kafka:
+    topics:
+      payment-initiated: "${PAYFLO_KAFKA_TOPIC_PAYMENT_INITIATED}"
+      notification-payment-initiated: "${PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_INITIATED}"
+      payment-received: "${PAYFLO_KAFKA_TOPIC_PAYMENT_RECEIVED}"
+      notification-payment-completed: "${PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_COMPLETED}"
+      payment-timed-out: "${PAYFLO_KAFKA_TOPIC_PAYMENT_TIMED_OUT}"
+      notification-payment-timed-out: "${PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_TIMED_OUT}"
+      payment-failed: "${PAYFLO_KAFKA_TOPIC_PAYMENT_FAILED}"
+      notification-payment-failed: "${PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_FAILED}"
+      dlt: "${PAYFLO_KAFKA_TOPIC_DLT}"

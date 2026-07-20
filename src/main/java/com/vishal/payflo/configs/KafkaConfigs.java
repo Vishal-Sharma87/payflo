@@ -1,13 +1,15 @@
 package com.vishal.payflo.configs;
 
 
-import com.vishal.payflo.events.*;
+import com.vishal.payflo.kafka.events.PaymentTimedOutNotificationEvent;
+import com.vishal.payflo.kafka.topics.KafkaTopicsProperties;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
@@ -23,6 +25,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Configuration
+@EnableConfigurationProperties(KafkaTopicsProperties.class)
 public class KafkaConfigs {
 
     @Value("${spring.kafka.bootstrap-servers}")
@@ -61,10 +64,6 @@ public class KafkaConfigs {
 
         configs.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
         configs.put(ErrorHandlingDeserializer.VALUE_DESERIALIZER_CLASS, JacksonJsonDeserializer.class);
-
-//        TODO JUST FOR TESTING INDIVIDUAL CONSUMER REMOVE ONCE TESTING DONE
-        configs.put(JacksonJsonDeserializer.VALUE_DEFAULT_TYPE, PaymentTimedOutNotificationEvent.class);
-        configs.put(JacksonJsonDeserializer.USE_TYPE_INFO_HEADERS, false);
 
         return new DefaultKafkaConsumerFactory<>(configs);
     }
