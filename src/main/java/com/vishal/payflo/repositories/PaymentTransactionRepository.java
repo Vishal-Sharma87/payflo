@@ -1,12 +1,14 @@
 package com.vishal.payflo.repositories;
 
 import com.vishal.payflo.entities.PaymentTransaction;
+import com.vishal.payflo.enums.TransactionStatus;
 import io.lettuce.core.dynamic.annotation.Param;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -22,5 +24,8 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
 
     @Modifying
     @Query("UPDATE PaymentTransaction pt1 SET pt1.transactionStatus = TransactionStatus.TIMED_OUT WHERE pt1.transactionId = :transactionId")
-    void markTransactionStatusTimedOut(UUID transactionId);
+    void markTransactionStatusTimedOut(@Param("transactionId") UUID transactionId);
+
+    @Query("SELECT pt1.transactionStatus FROM PaymentTransaction pt1 WHERE pt1.transactionId = :transactionId")
+    Optional<TransactionStatus> findTransactionStatusById(@Param("transactionId") UUID transactionId);
 }
