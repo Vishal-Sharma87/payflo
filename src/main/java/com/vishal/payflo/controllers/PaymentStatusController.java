@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.UUID;
+
 @RestController
 public class PaymentStatusController {
 
@@ -18,7 +20,7 @@ public class PaymentStatusController {
     }
 
     @GetMapping("/payment/status/{transactionId}")
-    public ResponseEntity<ApiResponse<PaymentStatusResponseDto>> getStatusIfExists(@PathVariable String transactionId){
+    public ResponseEntity<ApiResponse<PaymentStatusResponseDto>> getStatusIfExists(@PathVariable UUID transactionId){
         PaymentStatusResponseDto paymentStatusResponseDto = paymentStatusService.check(transactionId);
 
         return ResponseEntity.ok(ApiResponse.of(paymentStatusResponseDto));
