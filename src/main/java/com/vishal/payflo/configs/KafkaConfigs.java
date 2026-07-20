@@ -1,7 +1,6 @@
 package com.vishal.payflo.configs;
 
 
-import com.vishal.payflo.kafka.events.PaymentTimedOutNotificationEvent;
 import com.vishal.payflo.kafka.topics.KafkaTopicsProperties;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
