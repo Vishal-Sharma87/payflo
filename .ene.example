@@ -26,6 +26,16 @@ PAYFLO_STATUS_MESSAGE_TIMED_OUT=Your payment timed out. Please try again.
 PAYFLO_EXCEPTION_MESSAGE_TRANSACTION_NOT_FOUND=No transaction found for the given transaction ID.
 
 
+# *************************       Notification Message template            *********************
+
+PAYFLO_NOTIFICATION_TEMPLATE_PAYMENT_INITIATED=Your payment with transaction ID %s has been initiated.
+PAYFLO_NOTIFICATION_TEMPLATE_PAYMENT_COMPLETED=Your payment with transaction ID %s has been completed successfully.
+PAYFLO_NOTIFICATION_TEMPLATE_PAYMENT_FAILED=Your payment with transaction ID %s has failed.
+PAYFLO_NOTIFICATION_TEMPLATE_PAYMENT_TIMED_OUT=Your payment with transaction ID %s has timed out.
+
+
+
+
 
 # *************************      MySQL           *********************
 
