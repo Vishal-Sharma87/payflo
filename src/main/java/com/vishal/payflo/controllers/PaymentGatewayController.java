@@ -21,7 +21,6 @@ public class PaymentGatewayController {
         paymentGatewayService.completeTransaction(paymentConfirmRequestDto);
 
         return ResponseEntity.accepted().build();
-
     }
 
 }
