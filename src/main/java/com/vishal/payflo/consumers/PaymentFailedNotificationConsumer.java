@@ -13,7 +13,7 @@ public class PaymentFailedNotificationConsumer {
     public void sendPaymentTransactionFailedNotification(PaymentFailedNotificationEvent paymentFailedNotificationEvent){
         log.info(paymentFailedNotificationEvent.payload());
 
-        log.info("Notification sent for transactionId:{}, event:{}", paymentFailedNotificationEvent.transactionId(), "Payment-Failed-Notification");
+        log.info("Notification sent for transactionId:{}, event:{}", paymentFailedNotificationEvent.transactionId(), paymentFailedNotificationEvent.topic());
     }
 
 }
