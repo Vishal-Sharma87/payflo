@@ -12,10 +12,9 @@ public class PaymentInitiatedNotificationConsumer {
 
     @KafkaListener(topics="payflo.notification.payment-initiated", groupId = "payflo-consumer-group")
     public void sendPaymentTransactionInitiatedNotification(PaymentInitiatedNotificationEvent paymentInitiatedNotificationEvent){
-//        Notification Simulation via logging
         log.info(paymentInitiatedNotificationEvent.payload());
 
-        log.info("Notification sent for transactionId:{}, event:{}", paymentInitiatedNotificationEvent.transactionId(), "Payment-Initiated-Notification");
+        log.info("Notification sent for transactionId:{}, event:{}", paymentInitiatedNotificationEvent.transactionId(), paymentInitiatedNotificationEvent.topic());
     }
 
 }

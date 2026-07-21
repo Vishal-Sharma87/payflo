@@ -1,7 +1,11 @@
 package com.vishal.payflo.consumers;
 
 import com.vishal.payflo.entities.PaymentTransaction;
+import com.vishal.payflo.kafka.EventPublisher;
+import com.vishal.payflo.kafka.events.PaymentEvent;
 import com.vishal.payflo.kafka.events.PaymentInitiatedEvent;
+import com.vishal.payflo.kafka.events.PaymentInitiatedNotificationEvent;
+import com.vishal.payflo.notifications.NotificationMessageTemplateBuilder;
 import com.vishal.payflo.services.PaymentTransactionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -15,9 +19,15 @@ import java.util.UUID;
 public class PaymentInitiatedConsumer {
 
     private final PaymentTransactionService paymentTransactionService;
+    private final NotificationMessageTemplateBuilder notificationMessageTemplateBuilder;
+    private final EventPublisher eventPublisher;
 
-    public PaymentInitiatedConsumer(PaymentTransactionService paymentTransactionService){
+    public PaymentInitiatedConsumer(PaymentTransactionService paymentTransactionService,
+                                    NotificationMessageTemplateBuilder notificationMessageTemplateBuilder,
+                                    EventPublisher eventPublisher){
         this.paymentTransactionService = paymentTransactionService;
+        this.notificationMessageTemplateBuilder = notificationMessageTemplateBuilder;
+        this.eventPublisher = eventPublisher;
     }
 
 
@@ -29,10 +39,12 @@ public class PaymentInitiatedConsumer {
             PaymentTransaction paymentTransaction = PaymentTransaction.from(paymentInitiatedEvent);
             paymentTransactionService.createNewTransaction(paymentTransaction);
 
-//            TODO CREATE REDIS ENTRY
             log.info("Redis sorted sets insertion Simulation for transactionId:{} successful", transactionId);
 
-//            TODO FIRE THE payflo.notifiaction.payment-initiated event
+            String message = notificationMessageTemplateBuilder.build(paymentInitiatedEvent.topic(), transactionId);
+            PaymentEvent paymentEvent = new PaymentInitiatedNotificationEvent(transactionId, message);
+            eventPublisher.publish(paymentEvent);
+
             log.info("Notification event simulation for transactionId: {} successful", transactionId);
 
         } catch (DataIntegrityViolationException e) {
