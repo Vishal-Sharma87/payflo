@@ -13,6 +13,6 @@ public class PaymentCompletedNotificationConsumer {
     public void sendPaymentTransactionCompletedNotification(PaymentCompletedNotificationEvent paymentCompletedNotificationEvent){
         log.info(paymentCompletedNotificationEvent.payload());
 
-        log.info("Notification sent for transactionId:{}, event:{}", paymentCompletedNotificationEvent.transactionId(), "Payment-Completed-Notification");
+        log.info("Notification sent for transactionId:{}, event:{}", paymentCompletedNotificationEvent.transactionId(), paymentCompletedNotificationEvent.topic());
     }
 }
