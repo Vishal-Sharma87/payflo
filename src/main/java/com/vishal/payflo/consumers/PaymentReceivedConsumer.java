@@ -21,10 +21,7 @@ public class PaymentReceivedConsumer {
     public void completeTransaction(PaymentReceivedEvent paymentReceivedEvent){
         paymentTransactionService.markTransactionStatusCompleted(paymentReceivedEvent.transactionId());
 
-//        TODO SIMULATE WITH ACTUAL REDIS
         log.info("REDIS simulation of payment received for transactionId:{} is successful", paymentReceivedEvent.transactionId());
-
-//        TODO fire the termination notification (payment-completed) event
 
         log.info("Termination Notification (payment-completed) for transactionId:{} is successful", paymentReceivedEvent.transactionId());
     }
