@@ -42,6 +42,13 @@ payflo:
       failed: "${PAYFLO_STATUS_MESSAGE_FAILED}"
       timed-out: "${PAYFLO_STATUS_MESSAGE_TIMED_OUT}"
 
+  notification:
+    message-templates:
+      payment-initiated-notification: "${PAYFLO_NOTIFICATION_TEMPLATE_PAYMENT_INITIATED}"
+      payment-completed-notification: "${PAYFLO_NOTIFICATION_TEMPLATE_PAYMENT_COMPLETED}"
+      payment-failed-notification: "${PAYFLO_NOTIFICATION_TEMPLATE_PAYMENT_FAILED}"
+      payment-timed-out-notification: "${PAYFLO_NOTIFICATION_TEMPLATE_PAYMENT_TIMED_OUT}"
+
   exception:
     message:
       transaction-not-found: "${PAYFLO_EXCEPTION_MESSAGE_TRANSACTION_NOT_FOUND}"
