@@ -28,14 +28,25 @@ PAYFLO_STATUS_MESSAGE_TIMED_OUT=Your payment timed out. Please try again.
 
 
 
-# *************************      Exception-Messages           *********************
+# *************************Exception-Messages*********************
+
 PAYFLO_EXCEPTION_MESSAGE_TRANSACTION_NOT_FOUND=No transaction found for the given transaction ID.
+PAYFLO_EXCEPTION_MESSAGE_MALFORMED_REQUEST_BODY=The request body is malformed or contains invalid data.
+
+
+# *************************      Upi details exception messages           *********************
+
 PAYFLO_EXCEPTION_MESSAGE_VPA_SEPARATOR_COUNT_MISMATCH=Invalid VPA format. A VPA must contain exactly one '@' separator.
 PAYFLO_EXCEPTION_MESSAGE_VPA_INVALID_IDENTIFIER_FORMAT=Invalid VPA identifier. Must be 3-60 characters long and contain only lowercase letters, digits, dots, hyphens, or underscores.
 PAYFLO_EXCEPTION_MESSAGE_VPA_INVALID_PAYMENT_SERVICE_PROVIDER_FORMAT=Invalid VPA payment service provider format. Must be 3-39 characters long and contain only lowercase letters.
 PAYFLO_EXCEPTION_MESSAGE_VPA_UNKNOWN_PAYMENT_SERVICE_PROVIDER=The specified VPA payment service provider is not supported.
 
+# *************************      Card details exception messages           *********************
 
+PAYFLO_EXCEPTION_MESSAGE_INVALID_CARD_NUMBER_FORMAT=Card number must be 15 to 16 digits.
+PAYFLO_EXCEPTION_MESSAGE_INVALID_CARD_NUMBER=Invalid card number.
+PAYFLO_EXCEPTION_MESSAGE_EXPIRED_CARD=This card has expired.
+PAYFLO_EXCEPTION_MESSAGE_INVALID_CVV_FORMAT=CVV must be 3 or 4 digits.
 
 
 
