@@ -52,3 +52,11 @@ payflo:
   exception:
     message:
       transaction-not-found: "${PAYFLO_EXCEPTION_MESSAGE_TRANSACTION_NOT_FOUND}"
+      vpa-separator-count-mismatch: "${PAYFLO_EXCEPTION_MESSAGE_VPA_SEPARATOR_COUNT_MISMATCH}"
+      vpa-invalid-identifier-format: "${PAYFLO_EXCEPTION_MESSAGE_VPA_INVALID_IDENTIFIER_FORMAT}"
+      vpa-invalid-payment-service-provider-format: "${PAYFLO_EXCEPTION_MESSAGE_VPA_INVALID_PAYMENT_SERVICE_PROVIDER_FORMAT}"
+      vpa-unknown-payment-service-provider: "${PAYFLO_EXCEPTION_MESSAGE_VPA_UNKNOWN_PAYMENT_SERVICE_PROVIDER}"
+
+  validation:
+    vpa:
+      payment-service-providers: "${PAYFLO_VPA_PAYMENT_SERVICE_PROVIDERS}"
