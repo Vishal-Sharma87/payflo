@@ -1,6 +1,7 @@
 package com.vishal.payflo.advice;
 
 import com.vishal.payflo.advice.enums.ErrorCode;
+import com.vishal.payflo.advice.exceptions.InvalidVpaException;
 import com.vishal.payflo.advice.exceptions.PaymentTransactionNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -24,15 +25,25 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException exception) {
         String message = "Invalid value for parameter '" + exception.getName() + "', expected type: " + exception.getRequiredType().getSimpleName();
-        ErrorResponse error = ErrorResponse.of(message, ErrorCode.TYPE_MISMATCH);
+        ErrorResponse error = ErrorResponse.of(message, ErrorCode.METHOD_ARGUMENT_TYPE_MISMATCH);
         return ResponseEntity
                 .badRequest()
                 .body(error);
     }
 
+    @ExceptionHandler(InvalidVpaException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidVpaException(InvalidVpaException exception){
+        ErrorResponse error = ErrorResponse.of(exception.getMessage(), exception.getErrorCode());
+
+        return ResponseEntity
+                .badRequest()
+                .body(error);
+    }
+
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<String> catchAll(Exception ex) {
         log.error("CAUGHT: {}", ex.getClass().getName());
-        return ResponseEntity.status(500).body(ex.getClass().getName());
+        return ResponseEntity.status(500).body("Something Went wrong. Please retry after some time.");
     }
 }
