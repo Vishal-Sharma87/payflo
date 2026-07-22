@@ -1,62 +1,69 @@
-spring:
-  application:
-    name: ${APPLICATION_NAME:payflo}
-  datasource:
-    url: ${MYSQL_URL}
-    username: ${MYSQL_USER}
-    password: ${MYSQL_ROOT_PASSWORD}
-  jpa:
-    hibernate:
-      ddl-auto: ${JPA_DDL_AUTO:update}
-    show-sql: ${JPA_SHOW_SQL:false}
-    properties:
+  spring:
+    application:
+      name: "${APPLICATION_NAME:payflo}"
+    datasource:
+      url: "${MYSQL_URL}"
+      username: "${MYSQL_USER}"
+      password: "${MYSQL_ROOT_PASSWORD}"
+    jpa:
       hibernate:
-        format_sql: ${HIBERNATE_FORMAT_SQL:true}
-  kafka:
-    bootstrap-servers: ${BOOTSTRAP_SERVER}
-    consumer:
-      group-id: ${KAFKA_CONSUMER_GROUP_ID:payflo-group}
-      trusted-packages: ${KAFKA_TRUSTED_PACKAGES:com.vishal.payflo.kafka.events}
-  data:
-    redis:
-      host: ${REDIS_HOST}
-      port: ${REDIS_PORT}
+        ddl-auto: "${JPA_DDL_AUTO:update}"
+      show-sql: "${JPA_SHOW_SQL:false}"
+      properties:
+        hibernate:
+          format_sql: "${HIBERNATE_FORMAT_SQL:true}"
+    kafka:
+      bootstrap-servers: "${BOOTSTRAP_SERVER}"
+      consumer:
+        group-id: "${KAFKA_CONSUMER_GROUP_ID:payflo-group}"
+        trusted-packages: "${KAFKA_TRUSTED_PACKAGES:com.vishal.payflo.kafka.events}"
+    data:
+      redis:
+        host: "${REDIS_HOST}"
+        port: "${REDIS_PORT}"
 
-payflo:
-  kafka:
-    topics:
-      payment-initiated: "${PAYFLO_KAFKA_TOPIC_PAYMENT_INITIATED}"
-      notification-payment-initiated: "${PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_INITIATED}"
-      payment-received: "${PAYFLO_KAFKA_TOPIC_PAYMENT_RECEIVED}"
-      notification-payment-completed: "${PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_COMPLETED}"
-      payment-timed-out: "${PAYFLO_KAFKA_TOPIC_PAYMENT_TIMED_OUT}"
-      notification-payment-timed-out: "${PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_TIMED_OUT}"
-      payment-failed: "${PAYFLO_KAFKA_TOPIC_PAYMENT_FAILED}"
-      notification-payment-failed: "${PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_FAILED}"
-      dlt: "${PAYFLO_KAFKA_TOPIC_DLT}"
+  payflo:
+    kafka:
+      topics:
+        payment-initiated: "${PAYFLO_KAFKA_TOPIC_PAYMENT_INITIATED}"
+        notification-payment-initiated: "${PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_INITIATED}"
+        payment-received: "${PAYFLO_KAFKA_TOPIC_PAYMENT_RECEIVED}"
+        notification-payment-completed: "${PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_COMPLETED}"
+        payment-timed-out: "${PAYFLO_KAFKA_TOPIC_PAYMENT_TIMED_OUT}"
+        notification-payment-timed-out: "${PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_TIMED_OUT}"
+        payment-failed: "${PAYFLO_KAFKA_TOPIC_PAYMENT_FAILED}"
+        notification-payment-failed: "${PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_FAILED}"
+        dlt: "${PAYFLO_KAFKA_TOPIC_DLT}"
 
-  payment-transaction:
-    status-message:
-      processing: "${PAYFLO_STATUS_MESSAGE_PROCESSING}"
-      completed: "${PAYFLO_STATUS_MESSAGE_COMPLETED}"
-      failed: "${PAYFLO_STATUS_MESSAGE_FAILED}"
-      timed-out: "${PAYFLO_STATUS_MESSAGE_TIMED_OUT}"
+    payment-transaction:
+      status-message:
+        processing: "${PAYFLO_STATUS_MESSAGE_PROCESSING}"
+        completed: "${PAYFLO_STATUS_MESSAGE_COMPLETED}"
+        failed: "${PAYFLO_STATUS_MESSAGE_FAILED}"
+        timed-out: "${PAYFLO_STATUS_MESSAGE_TIMED_OUT}"
 
-  notification:
-    message-templates:
-      payment-initiated-notification: "${PAYFLO_NOTIFICATION_TEMPLATE_PAYMENT_INITIATED}"
-      payment-completed-notification: "${PAYFLO_NOTIFICATION_TEMPLATE_PAYMENT_COMPLETED}"
-      payment-failed-notification: "${PAYFLO_NOTIFICATION_TEMPLATE_PAYMENT_FAILED}"
-      payment-timed-out-notification: "${PAYFLO_NOTIFICATION_TEMPLATE_PAYMENT_TIMED_OUT}"
+    notification:
+      message-templates:
+        payment-initiated-notification: "${PAYFLO_NOTIFICATION_TEMPLATE_PAYMENT_INITIATED}"
+        payment-completed-notification: "${PAYFLO_NOTIFICATION_TEMPLATE_PAYMENT_COMPLETED}"
+        payment-failed-notification: "${PAYFLO_NOTIFICATION_TEMPLATE_PAYMENT_FAILED}"
+        payment-timed-out-notification: "${PAYFLO_NOTIFICATION_TEMPLATE_PAYMENT_TIMED_OUT}"
 
-  exception:
-    message:
-      transaction-not-found: "${PAYFLO_EXCEPTION_MESSAGE_TRANSACTION_NOT_FOUND}"
-      vpa-separator-count-mismatch: "${PAYFLO_EXCEPTION_MESSAGE_VPA_SEPARATOR_COUNT_MISMATCH}"
-      vpa-invalid-identifier-format: "${PAYFLO_EXCEPTION_MESSAGE_VPA_INVALID_IDENTIFIER_FORMAT}"
-      vpa-invalid-payment-service-provider-format: "${PAYFLO_EXCEPTION_MESSAGE_VPA_INVALID_PAYMENT_SERVICE_PROVIDER_FORMAT}"
-      vpa-unknown-payment-service-provider: "${PAYFLO_EXCEPTION_MESSAGE_VPA_UNKNOWN_PAYMENT_SERVICE_PROVIDER}"
+    exception:
+      message:
+        transaction-not-found: "${PAYFLO_EXCEPTION_MESSAGE_TRANSACTION_NOT_FOUND}"
+        vpa-separator-count-mismatch: "${PAYFLO_EXCEPTION_MESSAGE_VPA_SEPARATOR_COUNT_MISMATCH}"
+        vpa-invalid-identifier-format: "${PAYFLO_EXCEPTION_MESSAGE_VPA_INVALID_IDENTIFIER_FORMAT}"
+        vpa-invalid-payment-service-provider-format: "${PAYFLO_EXCEPTION_MESSAGE_VPA_INVALID_PAYMENT_SERVICE_PROVIDER_FORMAT}"
+        vpa-unknown-payment-service-provider: "${PAYFLO_EXCEPTION_MESSAGE_VPA_UNKNOWN_PAYMENT_SERVICE_PROVIDER}"
+        invalid-card-number-format: "${PAYFLO_EXCEPTION_MESSAGE_INVALID_CARD_NUMBER_FORMAT}"
+        invalid-card-number: "${PAYFLO_EXCEPTION_MESSAGE_INVALID_CARD_NUMBER}"
+        expired-card: "${PAYFLO_EXCEPTION_MESSAGE_EXPIRED_CARD}"
+        invalid-cvv-format: "${PAYFLO_EXCEPTION_MESSAGE_INVALID_CVV_FORMAT}"
+        malformed-request-body: "${PAYFLO_EXCEPTION_MESSAGE_MALFORMED_REQUEST_BODY}"
 
-  validation:
-    vpa:
-      payment-service-providers: "${PAYFLO_VPA_PAYMENT_SERVICE_PROVIDERS}"
+
+
+    validation:
+      vpa:
+        payment-service-providers: "${PAYFLO_VPA_PAYMENT_SERVICE_PROVIDERS}"
