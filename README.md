@@ -1,124 +1,226 @@
+
 # payflo
 
-A Kafka-first payment event processing simulation, built to develop deep, hands-on Kafka fluency through a realistic fintech backbone. This is not a real payment integration — actual payment execution is mocked. The focus is entirely on the event-driven architecture between the start and end of a payment: producers, consumers, partitioning, ordering guarantees, and consumer group behavior, all running against a self-managed local Kafka cluster.
+**An event-driven payment processing backbone, built on self-managed Apache Kafka.**
 
-## Why this project exists
+payflo simulates the system that sits between "a payment was requested" and "a payment reached its final state" — the part of a fintech platform that has to stay correct under duplicate deliveries, out-of-order network calls, and partial failures, without a synchronous call chain holding it together. Actual money movement (bank calls, card networks, UPI rails) is mocked. Everything around it — event production, consumption, ordering, partitioning, dead-letter handling, and idempotent persistence — is real, running against a self-managed Kafka cluster rather than a managed platform.
 
-Most Kafka experience gained through managed platforms (Confluent Cloud, MSK, etc.) abstracts away the internals — cluster bootstrapping, listener configuration, partition assignment, controller quorum setup. payflo is deliberately built on a self-managed, Docker-based Kafka cluster to force direct engagement with those internals, rather than relying on a managed control plane.
+---
 
-The system simulates the event-driven backbone of a payment: initiation, gateway confirmation (success or failure), timeout detection, and notification dispatch — all coordinated through Kafka topics and consumer groups instead of synchronous service calls.
+## Why this exists
 
-## System scope
+Most Kafka experience gained through managed platforms (Confluent Cloud, MSK) hides the parts that actually teach you how the system behaves — cluster bootstrapping, listener configuration, consumer group rebalancing, offset management, controller quorum setup. payflo is deliberately built on a self-managed, Docker-based Kafka cluster (KRaft mode, no ZooKeeper) and hand-rolled Spring Kafka configuration — no autoconfiguration — specifically so those mechanics stay visible instead of abstracted away.
 
-payflo starts when a payment request is received and ends at termination (success, failure, or timeout). Actual payment execution — bank calls, gateway SDKs — is mocked. Everything else (producers, consumers, topics, partitioning, offset management, dead-letter handling, persistence) is real.
+The domain is payments because it's an honest test case for event-driven design: a payment has a strict lifecycle, ordering genuinely matters per-transaction, duplicate processing has real consequences, and "eventually consistent" isn't good enough — the system has to reach one unambiguous final state, reliably, every time.
 
-## Architecture
+---
 
-### Flow overview
+## The core idea: no orchestrator, just events
 
-1. **Payment initiation** — `POST /payment/initiate` validates the request, generates a `transactionId` (UUIDv7), and fires an initiation event. A consumer persists the transaction to MySQL (Redis integration in progress) and fires a notification event.
-2. **Gateway confirmation (mocked)** — `POST /payment/confirm` simulates a payment gateway webhook, firing a success or failure event on separate topics. A consumer updates transaction state and fires a completion/failure notification.
-3. **Timeout monitoring** — a scheduled job periodically scans for transactions that have exceeded their processing window and fires a timeout event, independent of the gateway confirmation path. *(Not yet implemented — see Project status.)*
-4. **Status polling** — `GET /payment/status` is a read-only endpoint backed by Redis; it fires no Kafka events. *(Not yet implemented.)*
+There is no central service that walks a payment through its lifecycle step by step. An API fires _one_ event describing what just happened; a consumer reacts to that event, does its job, and — if the lifecycle continues — fires the _next_ event. Each stage only knows about the stage immediately before it, never the whole chain.
 
-All state transitions are driven by consumers reacting to events, not by a synchronous orchestrator service.
+```
+POST /payment/initiate
+        │
+        ▼
+ payflo.payment-initiated ──► PaymentInitiatedConsumer ──► persist + fire notification
+                                                                    │
+POST /payment/confirm                                              ▼
+        │                                          payflo.notification.payment-initiated
+        ▼
+ payflo.payment-received / payflo.payment-failed
+        │
+        ▼
+ PaymentReceivedConsumer / PaymentFailedConsumer ──► update state + fire notification
+```
 
-### Design principles
+**Why this matters:** a synchronous orchestrator (`if step1 succeeds, call step2, call step3...`) puts the availability of the _entire_ payment flow at the mercy of every individual step's uptime, and makes "retry just the failed step" hard to reason about. An event-driven chain means each stage can fail, restart, or replay independently — the persisted event _is_ the record of what needs to happen next, not something held in a service's memory.
 
-- **One topic per lifecycle stage**, not one topic with a status field — keeps each consumer single-responsibility and avoids bloating a single topic as new stages are added.
-- **Separate topics for success and failure outcomes**, rather than one topic with a polymorphic payload — keeps each consumer's downstream reaction purely additive (adding a new outcome type means a new topic + consumer, not a modified switch statement).
-- **Partition key = `transactionId`** — guarantees strict per-transaction ordering while allowing unrelated transactions to process in parallel across partitions.
-- **No synchronous orchestrator** — APIs fire only their own domain event; downstream reactions (termination, notification) are consumer responsibilities.
-- **Dedicated timeout monitor**, not a Kafka consumer — Kafka's job is to deliver, a consumer's job is to process, and a scheduler's job is to monitor. These are kept as separate concerns.
-- **Dual-write persistence** — MySQL for durable transaction history, Redis (including sorted sets) for fast in-flight state and O(log n + m) timeout range queries.
-- **No automatic retries** — a failed payment is not retried within the same window; the user must reinitiate. This is a deliberate product decision, not a limitation.
-- **Hand-rolled Kafka configuration**, not Spring Boot autoconfiguration — producer/consumer factories, serializers, and error handling are configured explicitly to make the underlying mechanics visible rather than abstracted away.
+---
 
-### Tech stack
+## Request flow
 
-| Layer                    | Choice                                          |
-|--------------------------|-------------------------------------------------|
-| Language                 | Java 21+                                        |
-| Framework                | Spring Boot                                     |
-| Message broker           | Apache Kafka (self-managed, KRaft mode, Docker) |
-| Primary datastore        | MySQL                                           |
-| Cache / fast-state store | Redis                                           |
-| Build tool               | Maven                                           |
-| Containerization         | Docker + Docker Compose                         |
-| ID generation            | UUIDv7 (`uuid-creator`)                         |
-| Testing                  | JUnit, Mockito                                  |
+### 1. Initiate a payment — `POST /payment/initiate`
 
-The application is a single Spring Boot monolith with clearly separated packages (consumers, events, entities, configs, services). Microservices were deliberately avoided to keep the project focused on Kafka behavior rather than distributed-systems networking concerns.
+Client submits an amount and payment method details (UPI VPA or card). The API validates the request structurally (see [Validation](#validation-real-checks-not-a-format-stub)), generates a time-ordered `transactionId` (UUIDv7), and fires `payflo.payment-initiated` — nothing is written to a database at this point.
+
+```json
+{
+  "amount": 1500.0,
+  "paymentDetails": {
+    "type": "UPI",
+    "vpa": "someone@okaxis"
+  }
+}
+```
+
+A consumer, listening independently, picks up that event, persists the transaction, and fires a notification event. The API's job ends at "I've validated this and told the system to start" — it does not wait for persistence to complete.
+
+**Why the API doesn't persist:** if `/payment/initiate` wrote to the database directly, the endpoint's reliability would be bound to the database's availability at that exact instant, and a slow write would make the API slow. Firing an event and returning immediately decouples "accepting the request" from "recording it" — the event itself is the durable handoff.
+
+### 2. Confirm via gateway (mocked) — `POST /payment/confirm`
+
+Simulates a payment gateway's webhook — the thing that would normally arrive asynchronously from a real bank or UPI switch. Reports one of two outcomes, and fires the corresponding event:
+
+```json
+{
+  "transactionId": "019...",
+  "status": "RECEIVED"
+}
+```
+
+Returns `202 Accepted` with no response body — deliberately. The actual state change (marking the transaction complete or failed) happens later, in a consumer. Returning a "confirmed" status here would claim something the API hasn't actually verified yet.
+
+**Why success and failure are separate topics, not one topic with a status field:** a single `payment-outcome` topic carrying a status enum would force every consumer to branch on that field, and adding a third outcome later means editing that branch. Two topics means adding a new outcome is _purely additive_ — a new topic and a new consumer, touching nothing that already works.
+
+### 3. Poll status — `GET /payment/status/{transactionId}`
+
+Read-only. Fires no events — a status check is an observation, not something that should ripple through the system as if it were new information.
+
+```json
+{
+  "data": {
+    "transactionId": "019...",
+    "status": "PROCESSING",
+    "message": "Your payment is being processed."
+  },
+  "currentTime": "2026-07-23T10:00:00Z"
+}
+```
+
+### 4. Discover payment options — `GET /payment/options`
+
+Returns the set of supported payment methods, derived directly from the system's own `PaymentType` enum — not a hardcoded list maintained separately, so the endpoint can never drift out of sync with what `/payment/initiate` actually accepts.
+
+---
+
+## Validation: real checks, not a format stub
+
+Payment details are validated structurally before anything reaches Kafka — a request that fails validation produces **no event at all**, because there's nothing yet worth recording.
+
+- **UPI VPA** — checked against the actual `identifier@handle` structure NPCI uses: identifier must be 3–60 characters (lowercase letters, digits, `.`, `-`, `_`), and the handle must match one of a known set of real PSP handles (`okaxis`, `ybl`, `paytm`, `airtel`, and others) rather than any arbitrary string.
+- **Card number** — validated with **Luhn's algorithm**, the actual checksum real card issuers use to catch transcription errors, not just a length check.
+- **Expiry** — modeled as `YearMonth` (no day component, matching how expiry actually works), checked against the current month.
+- **CVV** — 3 or 4 digits, stored and validated as a string (not numeric) so a leading-zero CVV like `007` isn't silently corrupted.
+
+**Why this matters for the story this project tells:** it would be easy to stub validation as "not null" and move on — the goal here isn't to build a production-grade validator, it's to demonstrate that the _shape_ of business logic is taken seriously even in a project whose real focus is Kafka. Every check is deliberately scoped to structural/local validation only — no external API calls, no real bank network lookups — because verifying a VPA or card is _actually active_ is a different problem than this project is solving.
+
+---
 
 ## Kafka topology
 
-Single broker, KRaft mode (ZooKeeper is unsupported as of Kafka 4.0), 3 partitions per topic, replication factor 1 (the only valid value on a single broker).
+Single broker, KRaft mode, 3 partitions per topic, replication factor 1 (the only valid value on a single-broker cluster).
 
-| Topic                                   | Fired by                                  | Purpose                                         |
-|-----------------------------------------|-------------------------------------------|-------------------------------------------------|
-| `payflo.payment-initiated`              | Payment initiation API                    | Payment request accepted and validated          |
-| `payflo.notification.payment-initiated` | `PaymentInitiatedConsumer`                | Initiation notification                         |
-| `payflo.payment-received`               | Mocked gateway confirmation API (success) | Gateway reported a successful outcome           |
-| `payflo.notification.payment-completed` | `PaymentReceivedConsumer`                 | Completion notification                         |
-| `payflo.payment-failed`                 | Mocked gateway confirmation API (failure) | Gateway reported a failed outcome, with reason  |
-| `payflo.notification.payment-failed`    | `PaymentFailedConsumer`                   | Failure notification                            |
-| `payflo.payment-timed-out`              | Timeout monitor scheduler *(pending)*     | Transaction exceeded its processing window      |
-| `payflo.notification.payment-timed-out` | `PaymentTimedoutConsumer`                 | Timeout notification                            |
-| `payflo.DLT`                            | Spring (`DeadLetterPublishingRecoverer`)  | Shared dead-letter topic for unparseable events |
+| Topic                                   | Fired by                                 | Purpose                                         |
+| --------------------------------------- | ---------------------------------------- | ----------------------------------------------- |
+| `payflo.payment-initiated`              | `/payment/initiate`                      | Payment request accepted and validated          |
+| `payflo.notification.payment-initiated` | `PaymentInitiatedConsumer`               | Initiation notification                         |
+| `payflo.payment-received`               | `/payment/confirm` (success)             | Gateway reported a successful outcome           |
+| `payflo.notification.payment-completed` | `PaymentReceivedConsumer`                | Completion notification                         |
+| `payflo.payment-failed`                 | `/payment/confirm` (failure)             | Gateway reported a failed outcome               |
+| `payflo.notification.payment-failed`    | `PaymentFailedConsumer`                  | Failure notification                            |
+| `payflo.payment-timed-out`              | Timeout monitor _(Phase 4.3)_            | Transaction exceeded its processing window      |
+| `payflo.notification.payment-timed-out` | `PaymentTimedoutConsumer`                | Timeout notification                            |
+| `payflo.DLT`                            | Spring (`DeadLetterPublishingRecoverer`) | Shared dead-letter topic for unparseable events |
 
-All events for a given `transactionId` land on the same partition (`hash(transactionId) % partitions`), preserving strict ordering per transaction. Partition count is fixed at topic creation — resizing later would change the hash-to-partition mapping and break ordering for in-flight transactions.
+**Partition key is always `transactionId`.** Every event belonging to the same transaction lands on the same partition — Kafka only guarantees ordering _within_ a partition, so this is what makes "this transaction's events are processed in the order they happened" a guarantee rather than a hope. Unrelated transactions land on different partitions and process fully in parallel.
 
-## Local infrastructure
+**One shared `payflo.DLT`, not eight per-topic dead-letter topics.** Handling a dead letter — log it, alert on it, replay it manually — doesn't depend on which topic it came from; the _business logic_ differs per notification topic, but dead-letter handling is generic by nature, so one shared topic avoids eight near-identical topics that would never diverge in practice.
 
-### Prerequisites
+---
 
-- Docker and Docker Compose
-- Java 21+
-- Maven
-- Bash (Git Bash or WSL on Windows) for `.sh` scripts, or native `.bat` on Windows
+## Every event knows its own topic and key
 
-### Starting the environment
+Rather than every caller hardcoding a topic string, each event type self-reports where it belongs:
 
-```bash
-# Checks Docker is running, starts Kafka/MySQL/Redis, and creates all topics
-./scripts/start-dev.sh    # or start-dev.bat on Windows
+```java
+public interface PaymentEvent {
+    KafkaTopic topic();
+    String key();
+}
+
+public record PaymentReceivedEvent(UUID transactionId) implements PaymentEvent {
+    public KafkaTopic topic() { return KafkaTopic.PAYMENT_RECEIVED; }
+    public String key() { return transactionId.toString(); }
+}
 ```
 
-Kafka runs a single broker acting as both broker and controller, with client traffic on `9092` and internal controller traffic on `9093`. The controller listener is intentionally not exposed to the host — only the broker itself needs to reach it.
+Publishing anywhere in the codebase is always the same one line:
 
-Topic creation is treated as a one-time infrastructure step, similar to a database migration: it runs after the broker is available and before the application starts, but is not embedded in `docker-compose.yml` (infrastructure should not encode domain/business configuration) or in application startup (would couple topic topology ownership to app boot time).
+```java
+eventPublisher.publish(new PaymentReceivedEvent(transactionId));
+```
 
-### Starting the application
+**Why this matters:** topic names as raw strings scattered across the codebase are a typo waiting to happen — a mismatched string silently sends an event nowhere useful. Centralizing topic names in one `@ConfigurationProperties`-bound record, resolved through a single `KafkaTopicResolver`, means every topic name is defined exactly once, sourced from configuration, and never re-typed.
 
-Once the environment is up:
+---
+
+## Idempotency and failure handling
+
+- **Persistence uses `EntityManager.persist()`, not `JpaRepository.save()`.** With a manually-assigned primary key (UUIDv7, not database-generated), Hibernate's `save()` can't tell "new" from "existing" — it silently does a select-then-merge instead of a clean insert. `persist()` is insert-only: a genuine duplicate throws `DataIntegrityViolationException`, which is caught, logged, and skipped. This is what actually makes redelivery-safe processing possible.
+- **Malformed messages never block a partition.** A deserialization failure is caught per-record (`ErrorHandlingDeserializer`) and routed straight to `payflo.DLT` with zero retries — retrying malformed JSON never succeeds, so retrying it is just wasted work standing in the way of the next message.
+- **Every failure path returns the same response shape.** A custom exception hierarchy (`PayfloException` → concrete exceptions, each carrying a machine-readable `ErrorCode`) feeds a single global exception handler, so a client never has to parse two different error formats depending on whether a business rule or a framework-level check failed.
+
+```json
+{
+  "message": "The specified VPA payment service provider is not supported.",
+  "errorCode": "VPA_UNKNOWN_PAYMENT_SERVICE_PROVIDER",
+  "timestamp": "2026-07-23T10:00:00Z"
+}
+```
+
+---
+
+## Tech stack
+
+| Layer              | Choice                                     | Why                                                                                      |
+| ------------------ | ------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Language           | Java 21+                                   | Sealed interfaces, pattern-matching switch, records — used throughout, not just for show |
+| Framework          | Spring Boot                                | Kafka/JPA wiring hand-rolled rather than autoconfigured, to keep the mechanics visible   |
+| Message broker     | Apache Kafka (self-managed, KRaft, Docker) | The entire point of the project                                                          |
+| Primary datastore  | MySQL                                      | Durable transaction history                                                              |
+| Cache / fast-state | Redis                                      | In-flight state, sorted-set timeout queries _(integration in progress)_                  |
+| Build tool         | Maven                                      |                                                                                          |
+| ID generation      | UUIDv7 (`uuid-creator`)                    | Time-ordered, sortable, no coordination required to generate                             |
+| Testing            | JUnit, Mockito                             |                                                                                          |
+
+Single Spring Boot monolith, deliberately — microservices would introduce networking and deployment concerns that have nothing to do with learning Kafka, and would dilute the actual focus of this project.
+
+---
+
+## Running it locally
+
+**Prerequisites:** Docker + Docker Compose, Java 21+, Maven, Bash (Git Bash/WSL on Windows).
 
 ```bash
+# Starts Kafka, MySQL, Redis, and creates all topics
+./scripts/start-dev.sh    # or start-dev.bat on Windows
+
+# Starts the application
 mvn spring-boot:run
 ```
 
-## Design decisions worth noting
+Topic creation runs as a one-time infrastructure step after the broker is up — not embedded in `docker-compose.yml` (infrastructure shouldn't encode business/domain configuration) and not triggered at application startup (topic topology shouldn't be owned by app boot).
 
-- **Validation failures produce no Kafka event.** If `POST /payment/initiate` fails validation, the API returns an error directly — no transaction record exists yet, so there is nothing for a consumer to act on.
-- **The polling API is read-only.** Status checks never fire events; only consumers fire termination and notification events, keeping that responsibility out of the API layer.
-- **Idempotency is enforced at the database layer, not via `JpaRepository.save()`.** For entities with a manually-assigned primary key (UUIDv7 `transactionId`, not `@GeneratedValue`), Hibernate cannot infer "new vs. existing" from the ID alone — `save()` silently performs a select-then-merge instead of a clean insert-or-fail. Persistence is done via `EntityManager.persist()` (insert-only semantics), with the resulting `DataIntegrityViolationException` on a genuine duplicate caught, logged, and skipped.
-- **Redelivery, not duplication, is the actual risk.** Kafka never spontaneously duplicates a single `send()` call; the same message can, however, be redelivered to a consumer that crashed after processing but before committing its offset. All idempotency and ordering reasoning in this project is built around that distinction.
-- **Malformed messages are routed to a shared dead-letter topic, not dropped or left blocking the partition.** `ErrorHandlingDeserializer` catches deserialization failures per-record; `DefaultErrorHandler` + `DeadLetterPublishingRecoverer` republish the failed record to `payflo.DLT` with zero retries (deserialization failures are permanent — retrying bad JSON never succeeds).
-- **Notification consumers contain no business logic.** Message formatting happens upstream, in the consumer that fires the notification event; the notification consumer's only job is to log/dispatch what it's given, keeping it purely mechanical.
+---
 
 ## Project status
 
-- [x] Requirements and design
-- [x] Local Kafka infrastructure (Docker, KRaft, topic creation, MySQL + Redis containers)
-- [x] Kafka producer/consumer configuration (hand-rolled, not autoconfigured)
-- [x] All 8 consumers implemented and tested (happy path, duplicate-delivery idempotency, malformed-payload DLT routing)
-- [x] MySQL persistence working end-to-end via `EntityManager.persist()`
-- [ ] Producer-side REST APIs (`/payment/initiate`, `/payment/confirm`) — in progress
-- [ ] Real Redis integration (currently simulated in consumer logs)
+- [x] Requirements, design, local Kafka infrastructure (Docker, KRaft, MySQL, Redis)
+- [x] Hand-rolled Kafka producer/consumer configuration
+- [x] All 8 consumers — happy path, duplicate-delivery idempotency, malformed-payload DLT routing
+- [x] Full REST API layer — `/payment/initiate`, `/payment/confirm`, `/payment/status`, `/payment/options`
+- [x] Structural validation — UPI VPA format + PSP allow-list, card number (Luhn), expiry, CVV
+- [x] Centralized Kafka topic resolution, event self-reporting, notification event pipeline
+- [x] Unified exception handling — custom business exceptions and framework-level exceptions, one response contract
+- [ ] Real Redis integration (currently simulated)
 - [ ] Timeout monitor scheduler
 - [ ] Partial-write idempotency across DB + Redis + notification dispatch (race-condition hardening)
 - [ ] Kafka behavior experiments (consumer failure, offset replay, partition rebalancing)
-- [ ] Testing
+- [ ] Test suite
 
-## Target use case
+---
 
-This project is built as a learning and portfolio artifact demonstrating hands-on Kafka fluency for backend/SDE interview preparation, with a particular focus on companies operating in the payments and fintech space.
+## Built for
+
+This project exists to demonstrate real, hands-on fluency with event-driven systems and self-managed Kafka — the kind of depth that's hard to fake in an interview — with a focus on backend/SDE roles at companies operating in payments and fintech.
