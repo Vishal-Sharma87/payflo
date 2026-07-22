@@ -8,5 +8,11 @@ public record ExceptionMessagesProperties(
         String vpaSeparatorCountMismatch,
         String vpaInvalidIdentifierFormat,
         String vpaInvalidPaymentServiceProviderFormat,
-        String vpaUnknownPaymentServiceProvider
-) {}
+        String vpaUnknownPaymentServiceProvider,
+        String invalidCardNumberFormat,
+        String invalidCardNumber,
+        String expiredCard,
+        String invalidCvvFormat,
+        String malformedRequestBody
+)
+{}
