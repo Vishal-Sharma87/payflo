@@ -1,10 +1,12 @@
   spring:
+    config:
+      import: "optional:file:.env[.properties]"
     application:
       name: "${APPLICATION_NAME:payflo}"
     datasource:
-      url: "${MYSQL_URL}"
-      username: "${MYSQL_USER}"
-      password: "${MYSQL_ROOT_PASSWORD}"
+      url: "${MYSQL_URL:jdbc:mysql://localhost:3306/payflo}"
+      username: "${MYSQL_USER:root}"
+      password: "${MYSQL_ROOT_PASSWORD:changeme}"
     jpa:
       hibernate:
         ddl-auto: "${JPA_DDL_AUTO:update}"
@@ -17,12 +19,20 @@
       consumer:
         group-id: "${KAFKA_CONSUMER_GROUP_ID:payflo-group}"
         trusted-packages: "${KAFKA_TRUSTED_PACKAGES:com.vishal.payflo.kafka.events}"
-    data:
-      redis:
-        host: "${REDIS_HOST}"
-        port: "${REDIS_PORT}"
 
   payflo:
+    redis:
+      host: "${REDIS_HOST}"
+      port: "${REDIS_PORT}"
+      keys:
+        payment-transaction-hash-prefix: "${REDIS_PAYMENT_TRANSACTION_HASH_PREFIX}"
+        payment-transaction-hash-status-key: "${REDIS_PAYMENT_TRANSACTION_HASH_STATUS_KEY}"
+        processing-transactions-zset-key: "${REDIS_PROCESSING_TRANSACTIONS_ZSET_KEY}"
+
+      ttl:
+        status-ttl-hours: "${PAYMENT_STATUS_TTL_HOURS}"
+
+
     kafka:
       topics:
         payment-initiated: "${PAYFLO_KAFKA_TOPIC_PAYMENT_INITIATED}"
@@ -34,6 +44,10 @@
         payment-failed: "${PAYFLO_KAFKA_TOPIC_PAYMENT_FAILED}"
         notification-payment-failed: "${PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_FAILED}"
         dlt: "${PAYFLO_KAFKA_TOPIC_DLT}"
+
+    payment:
+      timeout-buffer-minutes: "${PAYMENT_TIMEOUT_BUFFER_MINUTES}"
+
 
     payment-transaction:
       status-message:
@@ -61,8 +75,6 @@
         expired-card: "${PAYFLO_EXCEPTION_MESSAGE_EXPIRED_CARD}"
         invalid-cvv-format: "${PAYFLO_EXCEPTION_MESSAGE_INVALID_CVV_FORMAT}"
         malformed-request-body: "${PAYFLO_EXCEPTION_MESSAGE_MALFORMED_REQUEST_BODY}"
-
-
 
     validation:
       vpa:
