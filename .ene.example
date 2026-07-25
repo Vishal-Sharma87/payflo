@@ -64,9 +64,11 @@ PAYFLO_NOTIFICATION_TEMPLATE_PAYMENT_TIMED_OUT=Your payment with transaction ID 
 # *************************   Payment Service Providers Used              *********************
 PAYFLO_VPA_PAYMENT_SERVICE_PROVIDERS=okaxis,okhdfcbank,oksbi,okicici,ybl,axl,ibl,paytm,apl,upi,sbi,airtel,kotak,icici
 
+# *************************   Payment Configs             *********************
+PAYMENT_TIMEOUT_BUFFER_MINUTES=10
 
-
-
+# *************************  Redis TTL             *********************
+PAYMENT_STATUS_TTL_HOURS=1
 
 
 # ***********************     MySQL  ****************
@@ -87,14 +89,16 @@ MYSQL_USER=root
 MYSQL_ROOT_PASSWORD=changeme
 
 
-# *************************      Redis          *********************
+# ***********************     Redis  ****************
 
 
-# Redis host.
 REDIS_HOST=localhost
-
-# Redis port.
 REDIS_PORT=6379
+
+REDIS_PAYMENT_TRANSACTION_HASH_PREFIX=payflo:payment-transaction:
+REDIS_PROCESSING_TRANSACTIONS_ZSET_KEY=payflo:processing-payment-transactions:by-started-at
+REDIS_PAYMENT_TRANSACTION_HASH_STATUS_KEY=transactionStatus
+
 
 
 # *******************      Kafka Configs           *********************
