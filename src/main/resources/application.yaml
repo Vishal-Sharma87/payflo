@@ -79,3 +79,6 @@
     validation:
       vpa:
         payment-service-providers: "${PAYFLO_VPA_PAYMENT_SERVICE_PROVIDERS}"
+
+    scheduler:
+      transaction-monitor-fixed-delay-ms: ${TRANSACTION_MONITOR_FIXED_DELAY_MS}
