@@ -142,16 +142,12 @@ PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_FAILED=payflo.notification.payment-faile
 PAYFLO_KAFKA_TOPIC_DLT=payflo.DLT
 
 
-# *************************     Jpa & Hibernate        *********************
+
+# ***********************    Schedular properties      ****************
+TRANSACTION_MONITOR_FIXED_DELAY_MS=30000
 
 
-# Schema generation strategy.
-# Common values:
-#   create, create-drop, update, validate, none
+# ***********************    JPA / Hibernate     ****************
 JPA_DDL_AUTO=update
-
-# Print generated SQL statements.
 JPA_SHOW_SQL=true
-
-# Format SQL output for readability.
 HIBERNATE_FORMAT_SQL=true
