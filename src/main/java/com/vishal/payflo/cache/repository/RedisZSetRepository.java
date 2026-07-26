@@ -4,6 +4,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Repository;
 
+import java.util.Set;
+
 @Repository
 public class RedisZSetRepository {
 
@@ -20,5 +22,9 @@ public class RedisZSetRepository {
 
     public void remove(String zsetKey, String transactionId) {
         zSetOperations.remove(zsetKey, transactionId);
+    }
+
+    public Set<String> rangeByScore(String key, long minScore, long maxScore) {
+        return zSetOperations.rangeByScore(key, minScore, maxScore);
     }
 }
