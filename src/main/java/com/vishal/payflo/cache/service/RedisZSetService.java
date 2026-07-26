@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -38,6 +39,14 @@ public class RedisZSetService {
         String member = transactionId.toString();
 
         redisZSetRepository.remove(zsetKey, member);
+    }
+
+
+    public Set<String> findExpiredTransactionBefore(Instant deadline) {
+        String zsetKey = getZSetKey();
+        long maxScore = deadline.toEpochMilli();
+
+        return redisZSetRepository.rangeByScore(zsetKey, 0, maxScore);
     }
 
     private String getZSetKey(){
