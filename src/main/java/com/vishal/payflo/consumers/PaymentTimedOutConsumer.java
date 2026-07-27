@@ -1,7 +1,7 @@
 package com.vishal.payflo.consumers;
 
 import com.vishal.payflo.cache.service.RedisHashService;
-import com.vishal.payflo.cache.service.RedisZSetService;
+import com.vishal.payflo.cache.service.TransactionOwnershipService;
 import com.vishal.payflo.enums.TransactionStatus;
 import com.vishal.payflo.kafka.EventPublisher;
 import com.vishal.payflo.kafka.events.PaymentEvent;
@@ -25,19 +25,19 @@ public class PaymentTimedOutConsumer {
     private final NotificationMessageTemplateBuilder notificationMessageTemplateBuilder;
     private final EventPublisher eventPublisher;
     private final RedisHashService redisHashService;
-    private final RedisZSetService redisZSetService;
+    private final TransactionOwnershipService transactionOwnershipService;
 
 
     public PaymentTimedOutConsumer(PaymentTransactionService paymentTransactionService,
                                    NotificationMessageTemplateBuilder notificationMessageTemplateBuilder,
                                    EventPublisher eventPublisher,
                                    RedisHashService redisHashService,
-                                   RedisZSetService redisZSetService){
+                                   TransactionOwnershipService transactionOwnershipService){
         this.paymentTransactionService = paymentTransactionService;
         this.notificationMessageTemplateBuilder = notificationMessageTemplateBuilder;
         this.eventPublisher = eventPublisher;
         this.redisHashService  = redisHashService;
-        this.redisZSetService = redisZSetService;
+        this.transactionOwnershipService = transactionOwnershipService;
     }
 
 
@@ -46,14 +46,15 @@ public class PaymentTimedOutConsumer {
         UUID transactionId = paymentTimedOutEvent.transactionId();
         KafkaTopic topic = paymentTimedOutEvent.topic();
 
-        paymentTransactionService.markTransactionStatusTimedOut(transactionId);
+        if (transactionOwnershipService.tryClaim(transactionId, TransactionStatus.TIMED_OUT_PENDING)){
+            paymentTransactionService.markTransactionStatusTimedOut(transactionId);
 
-        redisHashService.finalizeStatus(transactionId, TransactionStatus.TIMED_OUT);
-        redisZSetService.remove(transactionId);
+            String message = notificationMessageTemplateBuilder.build(topic, transactionId);
+            PaymentEvent paymentEvent = new PaymentTimedOutNotificationEvent(transactionId, message);
+            eventPublisher.publish(paymentEvent);
 
-        String message = notificationMessageTemplateBuilder.build(topic, transactionId);
-        PaymentEvent paymentEvent = new PaymentTimedOutNotificationEvent(transactionId, message);
-        eventPublisher.publish(paymentEvent);
+            redisHashService.finalizeStatus(transactionId, TransactionStatus.TIMED_OUT);
+        }
 
     }
 }
