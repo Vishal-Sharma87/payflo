@@ -99,6 +99,12 @@ REDIS_PAYMENT_TRANSACTION_HASH_PREFIX=payflo:payment-transaction:
 REDIS_PROCESSING_TRANSACTIONS_ZSET_KEY=payflo:processing-payment-transactions:by-started-at
 REDIS_PAYMENT_TRANSACTION_HASH_STATUS_KEY=transactionStatus
 
+# ***********************     Redis Hash keys   ****************
+
+PAYMENT_INITIATED_NOTIFICATION_HASH_KEY=notification:payment-initiated
+PAYMENT_COMPLETED_NOTIFICATION_HASH_KEY=notification:payment-completed
+PAYMENT_FAILED_NOTIFICATION_HASH_KEY=notification:payment-failed
+PAYMENT_TIMED_OUT_NOTIFICATION_HASH_KEY=notification:payment-timed-out
 
 
 # *******************      Kafka Configs           *********************
