@@ -34,13 +34,11 @@ public class PaymentStatusService {
 
         TransactionStatus transactionStatus= TransactionStatus.valueOf(hashedStatus);
 
-        String message = switch (transactionStatus){
-            case PROCESSING -> statusMessagesProperties.processing();
-            case FAILED -> statusMessagesProperties.failed();
-            case TIMED_OUT -> statusMessagesProperties.timedOut();
-            case COMPLETED -> statusMessagesProperties.completed();
+        return switch (transactionStatus){
+            case PROCESSING, TIMED_OUT_PENDING, COMPLETED_PENDING, FAILED_PENDING -> new PaymentStatusResponseDto(transactionId, TransactionStatus.PROCESSING, statusMessagesProperties.processing());
+            case FAILED -> new PaymentStatusResponseDto(transactionId, transactionStatus, statusMessagesProperties.failed());
+            case TIMED_OUT -> new PaymentStatusResponseDto(transactionId, transactionStatus, statusMessagesProperties.timedOut());
+            case COMPLETED -> new PaymentStatusResponseDto(transactionId, transactionStatus, statusMessagesProperties.completed());
         };
-
-        return new PaymentStatusResponseDto(transactionId, transactionStatus, message);
     }
 }
