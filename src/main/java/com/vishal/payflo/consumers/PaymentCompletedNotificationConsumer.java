@@ -1,18 +1,31 @@
 package com.vishal.payflo.consumers;
 
 import com.vishal.payflo.kafka.events.PaymentCompletedNotificationEvent;
+import com.vishal.payflo.kafka.topics.KafkaTopic;
+import com.vishal.payflo.notifications.NotificationPublisher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
+
+import java.util.UUID;
 
 @Service
 @Slf4j
 public class PaymentCompletedNotificationConsumer {
 
-    @KafkaListener(topics="payflo.notification.payment-completed", groupId = "payflo-consumer-group")
-    public void sendPaymentTransactionCompletedNotification(PaymentCompletedNotificationEvent paymentCompletedNotificationEvent){
-        log.info(paymentCompletedNotificationEvent.payload());
+    private final NotificationPublisher notificationPublisher;
 
-        log.info("Notification sent for transactionId:{}, event:{}", paymentCompletedNotificationEvent.transactionId(), paymentCompletedNotificationEvent.topic());
+    public PaymentCompletedNotificationConsumer(NotificationPublisher notificationPublisher){
+        this.notificationPublisher = notificationPublisher;
+    }
+
+
+    @KafkaListener(topics= "payflo.notification.payment-completed", groupId = "payflo-consumer-group")
+    public void sendPaymentTransactionCompletedNotification(PaymentCompletedNotificationEvent paymentCompletedNotificationEvent){
+        UUID transactionId = paymentCompletedNotificationEvent.transactionId();
+        KafkaTopic kafkaTopic = paymentCompletedNotificationEvent.topic();
+        String payload = paymentCompletedNotificationEvent.payload();
+
+        notificationPublisher.publish(transactionId, payload, kafkaTopic);
     }
 }
