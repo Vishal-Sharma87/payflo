@@ -1,19 +1,32 @@
 package com.vishal.payflo.consumers;
 
 import com.vishal.payflo.kafka.events.PaymentTimedOutNotificationEvent;
+import com.vishal.payflo.kafka.topics.KafkaTopic;
+import com.vishal.payflo.notifications.NotificationPublisher;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
+
+import java.util.UUID;
 
 @Service
 @Slf4j
 public class PaymentTimedOutNotificationConsumer {
 
+
+    private final NotificationPublisher notificationPublisher;
+
+    public PaymentTimedOutNotificationConsumer(NotificationPublisher notificationPublisher){
+        this.notificationPublisher = notificationPublisher;
+    }
+
     @KafkaListener(topics="payflo.notification.payment-timed-out", groupId = "payflo-consumer-group")
     public void sendPaymentTransactionTimedOutNotification(PaymentTimedOutNotificationEvent paymentTimedOutNotificationEvent){
-        log.info(paymentTimedOutNotificationEvent.payload());
+        UUID transactionId = paymentTimedOutNotificationEvent.transactionId();
+        KafkaTopic kafkaTopic = paymentTimedOutNotificationEvent.topic();
+        String payload = paymentTimedOutNotificationEvent.payload();
 
-        log.info("Notification sent for transactionId:{}, event:{}", paymentTimedOutNotificationEvent.transactionId(), paymentTimedOutNotificationEvent.topic());
+        notificationPublisher.publish(transactionId, payload, kafkaTopic);
     }
 
 }
