@@ -21,11 +21,15 @@ public class RedisHashRepository {
         return hashOperations.get(key, hashKey);
     }
 
-    public void set(String key, String hashKey, String transactionStatus) {
-        hashOperations.put(key, hashKey, transactionStatus);
+    public void set(String key, String hashKey, String value) {
+        hashOperations.put(key, hashKey, value);
     }
 
     public void expire(String key, long hours) {
         redisTemplate.expire(key, Duration.ofHours(hours));
+    }
+
+    public boolean hasKey(String key, String hashKey) {
+        return hashOperations.hasKey(key, hashKey);
     }
 }
