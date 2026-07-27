@@ -1,7 +1,7 @@
 package com.vishal.payflo.consumers;
 
 import com.vishal.payflo.cache.service.RedisHashService;
-import com.vishal.payflo.cache.service.RedisZSetService;
+import com.vishal.payflo.cache.service.TransactionOwnershipService;
 import com.vishal.payflo.enums.TransactionStatus;
 import com.vishal.payflo.kafka.EventPublisher;
 import com.vishal.payflo.kafka.events.PaymentCompletedNotificationEvent;
@@ -23,35 +23,37 @@ public class PaymentReceivedConsumer {
     private final PaymentTransactionService paymentTransactionService;
     private final NotificationMessageTemplateBuilder notificationMessageTemplateBuilder;
     private final EventPublisher eventPublisher;
-    private final RedisHashService redisHashService;
-    private final RedisZSetService redisZSetService;
+    private final TransactionOwnershipService transactionOwnershipService;
+    private final RedisHashService hashService;
 
     public PaymentReceivedConsumer(PaymentTransactionService paymentTransactionService,
                                    NotificationMessageTemplateBuilder notificationMessageTemplateBuilder,
                                    EventPublisher eventPublisher,
-                                   RedisHashService redisHashService,
-                                   RedisZSetService redisZSetService){
+                                   TransactionOwnershipService transactionOwnershipService,
+                                   RedisHashService hashService){
+
         this.paymentTransactionService = paymentTransactionService;
         this.notificationMessageTemplateBuilder = notificationMessageTemplateBuilder;
         this.eventPublisher = eventPublisher;
-        this.redisHashService = redisHashService;
-        this.redisZSetService = redisZSetService;
+        this.transactionOwnershipService = transactionOwnershipService;
+        this.hashService = hashService;
     }
 
 
     @KafkaListener(topics = "payflo.payment-received", groupId = "payflo-consumer.group")
     public void completeTransaction(PaymentReceivedEvent paymentReceivedEvent) {
         UUID transactionId = paymentReceivedEvent.transactionId();
-        KafkaTopic topic = paymentReceivedEvent.topic();
+        KafkaTopic kafkaTopic = paymentReceivedEvent.topic();
 
-        paymentTransactionService.markTransactionStatusCompleted(transactionId);
+        if(transactionOwnershipService.tryClaim(transactionId, TransactionStatus.COMPLETED_PENDING)){
+            paymentTransactionService.markTransactionStatusCompleted(transactionId);
 
-        redisHashService.finalizeStatus(transactionId, TransactionStatus.COMPLETED);
-        redisZSetService.remove(transactionId);
+            String message = notificationMessageTemplateBuilder.build(kafkaTopic, transactionId);
+            PaymentEvent paymentEvent = new PaymentCompletedNotificationEvent(transactionId, message);
+            eventPublisher.publish(paymentEvent);
 
-        String message = notificationMessageTemplateBuilder.build(topic, transactionId);
-        PaymentEvent paymentEvent = new PaymentCompletedNotificationEvent(transactionId, message);
-        eventPublisher.publish(paymentEvent);
+            hashService.finalizeStatus(transactionId, TransactionStatus.COMPLETED);
+        }
     }
 
 }
