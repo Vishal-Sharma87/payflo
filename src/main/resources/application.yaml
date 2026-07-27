@@ -29,9 +29,14 @@
         payment-transaction-hash-status-key: "${REDIS_PAYMENT_TRANSACTION_HASH_STATUS_KEY}"
         processing-transactions-zset-key: "${REDIS_PROCESSING_TRANSACTIONS_ZSET_KEY}"
 
+      notification-hash-key:
+        payment-initiated-notification: ${PAYMENT_INITIATED_NOTIFICATION_HASH_KEY}
+        payment-completed-notification: ${PAYMENT_COMPLETED_NOTIFICATION_HASH_KEY}
+        payment-failed-notification: ${PAYMENT_FAILED_NOTIFICATION_HASH_KEY}
+        payment-timed-out-notification: ${PAYMENT_TIMED_OUT_NOTIFICATION_HASH_KEY}
+
       ttl:
         status-ttl-hours: "${PAYMENT_STATUS_TTL_HOURS}"
-
 
     kafka:
       topics:
