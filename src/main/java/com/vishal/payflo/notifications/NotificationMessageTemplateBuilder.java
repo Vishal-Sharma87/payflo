@@ -14,7 +14,6 @@ public class NotificationMessageTemplateBuilder {
         this.notificationMessageResolver = notificationMessageResolver;
     }
 
-
     public String build(KafkaTopic topic, UUID transactionId){
         String template = notificationMessageResolver.resolve(topic);
         return template.formatted(transactionId);
