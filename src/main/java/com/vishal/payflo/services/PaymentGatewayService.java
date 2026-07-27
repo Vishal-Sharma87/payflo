@@ -31,6 +31,5 @@ public class PaymentGatewayService {
         };
 
         eventPublisher.publish(paymentEvent);
-        log.info("GatewayStatus: {} for transactionId: {}, event fired: {}",gatewayStatus, transactionId, paymentEvent.key());
     }
 }
