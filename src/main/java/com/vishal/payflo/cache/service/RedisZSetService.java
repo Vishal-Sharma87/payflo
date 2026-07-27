@@ -49,7 +49,7 @@ public class RedisZSetService {
         return redisZSetRepository.rangeByScore(zsetKey, 0, maxScore);
     }
 
-    private String getZSetKey(){
+    public String getZSetKey(){
         return redisKeysProperties.processingTransactionsZSetKey();
     }
 
