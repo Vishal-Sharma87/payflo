@@ -1,7 +1,7 @@
 package com.vishal.payflo.consumers;
 
 import com.vishal.payflo.cache.service.RedisHashService;
-import com.vishal.payflo.cache.service.RedisZSetService;
+import com.vishal.payflo.cache.service.TransactionOwnershipService;
 import com.vishal.payflo.enums.TransactionStatus;
 import com.vishal.payflo.kafka.EventPublisher;
 import com.vishal.payflo.kafka.events.PaymentEvent;
@@ -24,7 +24,7 @@ public class PaymentFailedConsumer {
     private final NotificationMessageTemplateBuilder notificationMessageTemplateBuilder;
     private final EventPublisher eventPublisher;
     private final RedisHashService redisHashService;
-    private final RedisZSetService redisZSetService;
+    private final TransactionOwnershipService transactionOwnershipService;
 
 
 
@@ -32,12 +32,12 @@ public class PaymentFailedConsumer {
                                  NotificationMessageTemplateBuilder notificationMessageTemplateBuilder,
                                  EventPublisher eventPublisher,
                                  RedisHashService redisHashService,
-                                 RedisZSetService redisZSetService){
+                                 TransactionOwnershipService transactionOwnershipServic){
         this.paymentTransactionService = paymentTransactionService;
         this.notificationMessageTemplateBuilder = notificationMessageTemplateBuilder;
         this.eventPublisher = eventPublisher;
         this.redisHashService = redisHashService;
-        this.redisZSetService = redisZSetService;
+        this.transactionOwnershipService = transactionOwnershipServic;
     }
 
 
@@ -46,14 +46,16 @@ public class PaymentFailedConsumer {
         UUID transactionId = paymentFailedEvent.transactionId();
         KafkaTopic topic = paymentFailedEvent.topic();
 
-        paymentTransactionService.markPaymentTransactionFailed(transactionId);
+        if(transactionOwnershipService.tryClaim(transactionId, TransactionStatus.TIMED_OUT_PENDING)){
+            paymentTransactionService.markPaymentTransactionFailed(transactionId);
 
-        redisHashService.finalizeStatus(transactionId, TransactionStatus.FAILED);
-        redisZSetService.remove(transactionId);
+            String message = notificationMessageTemplateBuilder.build(topic, transactionId);
+            PaymentEvent paymentEvent = new PaymentFailedNotificationEvent(transactionId, message);
+            eventPublisher.publish(paymentEvent);
 
-        String message = notificationMessageTemplateBuilder.build(topic, transactionId);
-        PaymentEvent paymentEvent = new PaymentFailedNotificationEvent(transactionId, message);
-        eventPublisher.publish(paymentEvent);
+            redisHashService.finalizeStatus(transactionId, TransactionStatus.FAILED);
+        }
+
     }
 
 }
