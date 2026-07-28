@@ -26,6 +26,7 @@ public class PaymentCompletedNotificationConsumer {
         KafkaTopic kafkaTopic = paymentCompletedNotificationEvent.topic();
         String payload = paymentCompletedNotificationEvent.payload();
 
+        log.info("Received notification event for transactionId:{} topic:{}", transactionId, kafkaTopic);
         notificationPublisher.publish(transactionId, payload, kafkaTopic);
     }
 }
