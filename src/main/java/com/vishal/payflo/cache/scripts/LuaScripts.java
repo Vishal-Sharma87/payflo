@@ -25,4 +25,20 @@ public final class LuaScripts {
 
         return RedisScript.of(script, Long.class);
     }
+
+    public static RedisScript<Void> getPaymentTransactionInitializationScript() {
+        String script = """
+                local hashKey = KEYS[1]
+                local statusHashKey = KEYS[2]
+                local zsetKey = KEYS[3]
+                
+                local score = tonumber(ARGV[1])
+                local member = ARGV[2]
+                
+                redis.call('HSET', hashKey, statusHashKey,'PROCESSING')
+                redis.call('ZADD', zsetKey, score, member)
+                """;
+
+            return RedisScript.of(script, Void.class);
+    }
 }
