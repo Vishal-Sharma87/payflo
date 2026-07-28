@@ -32,12 +32,12 @@ public class PaymentFailedConsumer {
                                  NotificationMessageTemplateBuilder notificationMessageTemplateBuilder,
                                  EventPublisher eventPublisher,
                                  RedisHashService redisHashService,
-                                 TransactionOwnershipService transactionOwnershipServic){
+                                 TransactionOwnershipService transactionOwnershipService){
         this.paymentTransactionService = paymentTransactionService;
         this.notificationMessageTemplateBuilder = notificationMessageTemplateBuilder;
         this.eventPublisher = eventPublisher;
         this.redisHashService = redisHashService;
-        this.transactionOwnershipService = transactionOwnershipServic;
+        this.transactionOwnershipService = transactionOwnershipService;
     }
 
 
