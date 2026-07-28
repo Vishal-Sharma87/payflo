@@ -1,12 +1,13 @@
 package com.vishal.payflo.configs;
 
 
+import com.vishal.payflo.kafka.topics.KafkaTopic;
+import com.vishal.payflo.kafka.topics.KafkaTopicResolver;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
@@ -24,14 +25,16 @@ import java.util.Map;
 @Configuration
 public class KafkaConfigs {
 
-    @Value("${spring.kafka.bootstrap-servers}")
-    private String bootstrapServers;
+    private final KafkaConnectionProperties kafkaConnectionProperties;
+    private final KafkaTopicResolver kafkaTopicResolver;
 
-    @Value("${spring.kafka.consumer.group-id}")
-    private String groupId;
+    public KafkaConfigs(
+            KafkaConnectionProperties kafkaConnectionProperties,
+            KafkaTopicResolver kafkaTopicResolver){
+        this.kafkaConnectionProperties = kafkaConnectionProperties;
+        this.kafkaTopicResolver = kafkaTopicResolver;
+    }
 
-    @Value("${spring.kafka.consumer.trusted-packages}")
-    private String trustedPackages;
 
     @Bean
     public KafkaTemplate<String, Object> kafkaTemplate() {
@@ -41,7 +44,7 @@ public class KafkaConfigs {
     private ProducerFactory<String, Object> producerFactory(){
 
         Map<String, Object> config = new HashMap<>();
-        config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaConnectionProperties.bootstrapServers());
         config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         config.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JacksonJsonSerializer.class);
 
@@ -52,10 +55,10 @@ public class KafkaConfigs {
     @Bean
     public ConsumerFactory<String, Object> consumerFactory() {
         Map<String, Object> configs = new HashMap<>();
-        configs.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        configs.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
+        configs.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaConnectionProperties.bootstrapServers());
+        configs.put(ConsumerConfig.GROUP_ID_CONFIG, kafkaConnectionProperties.groupId());
         configs.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        configs.put(JacksonJsonDeserializer.TRUSTED_PACKAGES, trustedPackages);
+        configs.put(JacksonJsonDeserializer.TRUSTED_PACKAGES, kafkaConnectionProperties.trustedPackages());
 
 
         configs.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
@@ -67,7 +70,7 @@ public class KafkaConfigs {
     @Bean
     public DefaultErrorHandler errorHandler(KafkaTemplate<String, Object> kafkaTemplate) {
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate,
-                (record, ex) -> new TopicPartition("payflo.DLT", record.partition() % 3));
+                (record, ex) -> new TopicPartition(kafkaTopicResolver.resolve(KafkaTopic.DLT), record.partition() % 3));
 
         return new DefaultErrorHandler(recoverer, new FixedBackOff(0L, 0L));
     }
