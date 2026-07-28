@@ -23,11 +23,6 @@ public class PaymentTransactionService {
 
 
     @Transactional
-    public void createNewTransaction(PaymentTransaction transaction) {
-        entityManager.persist(transaction);
-    }
-
-    @Transactional
     public void markTransactionStatusCompleted(UUID transactionId) {
         paymentTransactionRepository.markTransactionStatusCompleted(transactionId);
     }
@@ -40,5 +35,10 @@ public class PaymentTransactionService {
     @Transactional
     public void markTransactionStatusTimedOut(UUID transactionId) {
         paymentTransactionRepository.markTransactionStatusTimedOut(transactionId);
+    }
+
+    @Transactional
+    public void persistNewTransaction(PaymentTransaction paymentTransaction) {
+        entityManager.persist(paymentTransaction);
     }
 }
