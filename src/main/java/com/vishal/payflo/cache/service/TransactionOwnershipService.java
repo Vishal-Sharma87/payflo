@@ -6,6 +6,8 @@ import com.vishal.payflo.enums.TransactionStatus;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,19 +29,16 @@ public class TransactionOwnershipService {
 
 
     public boolean tryClaim(UUID transactionId, TransactionStatus intermediateStatus){
+        RedisScript<Long> tryClaimScript = LuaScripts.tryClaimScript();
+
         String hashKey = hashService.buildKey(transactionId);
         String statusHashKey = hashService.getStatusHashKey();
         String zsetKey = zSetService.getZSetKey();
+        List<String> keys = new ArrayList<>(Arrays.asList(hashKey, statusHashKey, zsetKey));
 
         String statusToPass = intermediateStatus.name();
         String member = transactionId.toString();
 
-
-        List<String> keys = List.of(hashKey, statusHashKey, zsetKey);
-        List<String> arguments = List.of(statusToPass, member);
-
-        RedisScript<Long> tryClaimScript = LuaScripts.tryClaimScript();
-
-        return transactionOwnershipRepository.tryClaim(tryClaimScript, keys, arguments);
+        return transactionOwnershipRepository.tryClaim(tryClaimScript, keys, statusToPass, member);
     }
 }
