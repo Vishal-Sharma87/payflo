@@ -35,19 +35,6 @@ public class RedisHashService {
         return redisHashRepository.findStatus(key, hashKey);
     }
 
-    /**
-     * Creates the initial status hash entry for a transaction.
-     * Always writes {@link TransactionStatus#PROCESSING} — by design, a hash
-     * entry is only ever created at payment-initiation time, so no other
-     * status is possible at creation.
-     */
-    public void createStatus(UUID transactionId) {
-        String key = buildKey(transactionId);
-        String hashKey = getStatusHashKey();
-
-        redisHashRepository.set(key, hashKey, TransactionStatus.PROCESSING.toString());
-    }
-
     public void finalizeStatus(UUID transactionId, TransactionStatus transactionStatus) {
         String key = buildKey(transactionId);
         String hashKey = getStatusHashKey();
