@@ -6,11 +6,13 @@ import com.vishal.payflo.configs.RedisStatusTtlProperties;
 import com.vishal.payflo.enums.TransactionStatus;
 import com.vishal.payflo.kafka.topics.KafkaTopic;
 import com.vishal.payflo.notifications.NotificationHashKeyResolver;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class RedisHashService {
 
     private final RedisHashRepository redisHashRepository;
@@ -30,12 +32,16 @@ public class RedisHashService {
     }
 
     public String getStatus(UUID transactionId) {
+        log.info("Reading transaction status for transactionId:{}", transactionId);
         String key = buildKey(transactionId);
         String hashKey = getStatusHashKey();
-        return redisHashRepository.findStatus(key, hashKey);
+        String status = redisHashRepository.findStatus(key, hashKey);
+        log.info("Read transaction status {} for transactionId:{}", status, transactionId);
+        return status;
     }
 
     public void finalizeStatus(UUID transactionId, TransactionStatus transactionStatus) {
+        log.info("Finalizing transaction status {} for transactionId:{}", transactionStatus, transactionId);
         String key = buildKey(transactionId);
         String hashKey = getStatusHashKey();
 
@@ -43,20 +49,27 @@ public class RedisHashService {
 
         redisHashRepository.set(key, hashKey, transactionStatus.toString());
         redisHashRepository.expire(key, statusTtl);
+        log.info("Transaction status finalized as {} for transactionId:{}", transactionStatus, transactionId);
     }
 
     public boolean isNotificationSent(UUID transactionId, KafkaTopic kafkaTopic) {
         String key = buildKey(transactionId);
         String notificationHashKey = getNotificationHashKey(kafkaTopic);
 
-        return redisHashRepository.hasKey(key, notificationHashKey);
+        boolean sent = redisHashRepository.hasKey(key, notificationHashKey);
+        if (!sent) {
+            log.info("Notification not yet sent for transactionId:{} topic:{}", transactionId, kafkaTopic);
+        }
+        return sent;
     }
 
     public void notificationProcessed(UUID transactionId, KafkaTopic kafkaTopic) {
+        log.info("Marking notification processed for transactionId:{} topic:{}", transactionId, kafkaTopic);
         String key = buildKey(transactionId);
         String notificationHashKey = getNotificationHashKey(kafkaTopic);
 
         redisHashRepository.set(key, notificationHashKey,Boolean.toString(true));
+        log.info("Notification marked processed for transactionId:{} topic:{}", transactionId, kafkaTopic);
     }
 
     private String getNotificationHashKey(KafkaTopic kafkaTopic) {
