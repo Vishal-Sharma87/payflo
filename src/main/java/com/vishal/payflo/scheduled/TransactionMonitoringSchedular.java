@@ -30,8 +30,11 @@ public class TransactionMonitoringSchedular {
     @Scheduled(fixedDelayString = "${payflo.scheduler.transaction-monitor-fixed-delay-ms}")
     public void finalizeTimedOutPaymentTransaction(){
         Set<String> transactionIds = zSetService.findExpiredTransactionBefore(Instant.now());
+        if (transactionIds != null && !transactionIds.isEmpty()) {
+            log.info("Publishing timed out events for {} expired transaction(s)", transactionIds.size());
+            transactionIds.forEach(this::terminateTransaction);
+        }
 
-        transactionIds.forEach(this::terminateTransaction);
     }
 
     private void terminateTransaction(String id) {
