@@ -25,6 +25,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleMalformedRequestBody(HttpMessageNotReadableException exception) {
+        logException(ErrorCode.INVALID_REQUEST_BODY_FORMAT, exceptionMessages.malformedRequestBody());
         ErrorResponse error = ErrorResponse.of(exceptionMessages.malformedRequestBody(), ErrorCode.INVALID_REQUEST_BODY_FORMAT);
         return ResponseEntity
                 .badRequest()
@@ -33,6 +34,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(PaymentTransactionNotFoundException.class)
     public ResponseEntity<ErrorResponse> handlePaymentTransactionWithTransactionIdNotFound(PaymentTransactionNotFoundException exception){
+        logException(exception.getErrorCode(), exception.getMessage());
         ErrorResponse error = ErrorResponse.of(exception.getMessage(),exception.getErrorCode());
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
@@ -42,6 +44,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException exception) {
         String message = "Invalid value for parameter '" + exception.getName() + "', expected type: " + exception.getRequiredType().getSimpleName();
+        logException(ErrorCode.METHOD_ARGUMENT_TYPE_MISMATCH, message);
         ErrorResponse error = ErrorResponse.of(message, ErrorCode.METHOD_ARGUMENT_TYPE_MISMATCH);
         return ResponseEntity
                 .badRequest()
@@ -50,6 +53,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidVpaException.class)
     public ResponseEntity<ErrorResponse> handleInvalidVpaException(InvalidVpaException exception){
+        logException(exception.getErrorCode(), exception.getMessage());
         ErrorResponse error = ErrorResponse.of(exception.getMessage(), exception.getErrorCode());
 
         return ResponseEntity
@@ -59,6 +63,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidCardDetailsException.class)
     public ResponseEntity<ErrorResponse> handleInvalidCardDetailsException(InvalidCardDetailsException exception){
+        logException(exception.getErrorCode(), exception.getMessage());
         ErrorResponse error = ErrorResponse.of(exception.getMessage(), exception.getErrorCode());
 
         return ResponseEntity
@@ -69,7 +74,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<String> catchAll(Exception ex) {
-        log.error("CAUGHT: {}", ex.getClass().getName());
+        log.warn("Handled exception message:{} class:{}", ex.getMessage(), ex.getClass().getName());
         return ResponseEntity.status(500).body("Something Went wrong. Please retry after some time.");
+    }
+
+    private void logException(ErrorCode errorCode, String message) {
+        log.warn("Handled exception ErrorCode:{} message:{}", errorCode, message);
     }
 }
