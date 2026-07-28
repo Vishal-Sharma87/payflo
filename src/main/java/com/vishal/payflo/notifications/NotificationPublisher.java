@@ -20,9 +20,12 @@ public class NotificationPublisher {
 
     public void publish(UUID transactionId, String payload, KafkaTopic kafkaTopic){
         if (!hashService.isNotificationSent(transactionId, kafkaTopic)){
-            log.info("Sending notification for transactionId:{} topic:{}", transactionId, kafkaTopic);
+            log.info("Sending notification simulation for transactionId:{} topic:{}", transactionId, kafkaTopic);
+
+            log.info(payload);
+
             hashService.notificationProcessed(transactionId, kafkaTopic);
-            log.info("Notification sent for transactionId:{} topic:{}", transactionId, kafkaTopic);
+            log.info("Notification simulation done for transactionId:{} topic:{}", transactionId, kafkaTopic);
         }
     }
 }
