@@ -44,8 +44,10 @@ public class PaymentReceivedConsumer {
     public void completeTransaction(PaymentReceivedEvent paymentReceivedEvent) {
         UUID transactionId = paymentReceivedEvent.transactionId();
         KafkaTopic kafkaTopic = paymentReceivedEvent.topic();
+        log.info("Received payment event for transactionId:{} topic:{}", transactionId, kafkaTopic);
 
         if(transactionOwnershipService.tryClaim(transactionId, TransactionStatus.COMPLETED_PENDING)){
+            log.info("Processing transactionId:{}", transactionId);
             paymentTransactionService.markTransactionStatusCompleted(transactionId);
 
             String message = notificationMessageTemplateBuilder.build(kafkaTopic, transactionId);
@@ -53,6 +55,9 @@ public class PaymentReceivedConsumer {
             eventPublisher.publish(paymentEvent);
 
             hashService.finalizeStatus(transactionId, TransactionStatus.COMPLETED);
+            log.info("Transaction finalized as COMPLETED for transactionId:{}", transactionId);
+        } else {
+            log.warn("Skipping transactionId:{} because ownership was not claimed", transactionId);
         }
     }
 
