@@ -3,6 +3,7 @@ package com.vishal.payflo.cache.service;
 import com.vishal.payflo.cache.repository.TransactionOwnershipRepository;
 import com.vishal.payflo.cache.scripts.LuaScripts;
 import com.vishal.payflo.enums.TransactionStatus;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
@@ -12,6 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class TransactionOwnershipService {
 
     private final TransactionOwnershipRepository transactionOwnershipRepository;
@@ -29,6 +31,7 @@ public class TransactionOwnershipService {
 
 
     public boolean tryClaim(UUID transactionId, TransactionStatus intermediateStatus){
+        log.info("Attempting ownership claim for transactionId:{} status:{}", transactionId, intermediateStatus);
         RedisScript<Long> tryClaimScript = LuaScripts.tryClaimScript();
 
         String hashKey = hashService.buildKey(transactionId);
@@ -39,6 +42,12 @@ public class TransactionOwnershipService {
         String statusToPass = intermediateStatus.name();
         String member = transactionId.toString();
 
-        return transactionOwnershipRepository.tryClaim(tryClaimScript, keys, statusToPass, member);
+        boolean claimed = transactionOwnershipRepository.tryClaim(tryClaimScript, keys, statusToPass, member);
+        if (claimed) {
+            log.info("Ownership claim succeeded for transactionId:{}", transactionId);
+        } else {
+            log.warn("Ownership claim failed for transactionId:{}", transactionId);
+        }
+        return claimed;
     }
 }
