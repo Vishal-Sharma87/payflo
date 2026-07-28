@@ -1,6 +1,5 @@
 package com.vishal.payflo.consumers;
 
-import com.vishal.payflo.cache.service.RedisHashService;
 import com.vishal.payflo.kafka.events.PaymentFailedNotificationEvent;
 import com.vishal.payflo.kafka.topics.KafkaTopic;
 import com.vishal.payflo.notifications.NotificationPublisher;
