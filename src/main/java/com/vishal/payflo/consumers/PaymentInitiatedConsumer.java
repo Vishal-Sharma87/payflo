@@ -37,11 +37,17 @@ public class PaymentInitiatedConsumer {
 
     @KafkaListener(topics = "payflo.payment-initiated", groupId = "payflo-consumer.group")
     public void initiateTransaction(PaymentInitiatedEvent paymentInitiatedEvent) {
+        UUID transactionId = paymentInitiatedEvent.transactionId();
+        KafkaTopic kafkaTopic = paymentInitiatedEvent.topic();
+        log.info("Received payment event for transactionId:{} topic:{}", transactionId, kafkaTopic);
         try {
             PaymentTransaction paymentTransaction = PaymentTransaction.from(paymentInitiatedEvent);
+            log.info("Persisting new transactionId:{}", transactionId);
             paymentTransactionService.persistNewTransaction(paymentTransaction);
+            log.info("Transaction persisted for transactionId:{}", transactionId);
             finalizeInitiation(paymentInitiatedEvent);
         } catch (DuplicateKeyException e) {
+            log.warn("Duplicate transaction detected, continuing initialization for transactionId:{}", transactionId);
             finalizeInitiation(paymentInitiatedEvent);
         }
     }
@@ -50,10 +56,12 @@ public class PaymentInitiatedConsumer {
         UUID transactionId = paymentInitiatedEvent.transactionId();
         KafkaTopic kafkaTopic = paymentInitiatedEvent.topic();
 
+        log.info("Initializing transaction state for transactionId:{}", transactionId);
         transactionInitializationService.initialize(transactionId, paymentInitiatedEvent.startedAt());
 
         String message = notificationMessageTemplateBuilder.build(kafkaTopic, transactionId);
         PaymentEvent notificationEvent = new PaymentInitiatedNotificationEvent(transactionId, message);
         eventPublisher.publish(notificationEvent);
+        log.info("Transaction initiation finalized for transactionId:{}", transactionId);
     }
 }
