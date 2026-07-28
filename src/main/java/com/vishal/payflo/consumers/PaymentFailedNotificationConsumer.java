@@ -26,6 +26,7 @@ public class PaymentFailedNotificationConsumer {
         KafkaTopic kafkaTopic = paymentFailedNotificationEvent.topic();
         String payload = paymentFailedNotificationEvent.payload();
 
+        log.info("Received notification event for transactionId:{} topic:{}", transactionId, kafkaTopic);
         notificationPublisher.publish(transactionId, payload, kafkaTopic);
 
     }
