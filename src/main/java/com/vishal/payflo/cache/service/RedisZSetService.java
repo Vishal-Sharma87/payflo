@@ -3,6 +3,7 @@ package com.vishal.payflo.cache.service;
 import com.vishal.payflo.cache.repository.RedisZSetRepository;
 import com.vishal.payflo.configs.PaymentTimeoutProperties;
 import com.vishal.payflo.configs.RedisKeysProperties;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -10,6 +11,7 @@ import java.time.Instant;
 import java.util.Set;
 
 @Service
+@Slf4j
 public class RedisZSetService {
 
     private final RedisZSetRepository redisZSetRepository;
@@ -29,7 +31,13 @@ public class RedisZSetService {
         String zsetKey = getZSetKey();
         long maxScore = deadline.toEpochMilli();
 
-        return redisZSetRepository.rangeByScore(zsetKey, 0, maxScore);
+        Set<String> transactionIds = redisZSetRepository.rangeByScore(zsetKey, 0, maxScore);
+
+        if (transactionIds != null && !transactionIds.isEmpty()) {
+            log.info("Found {} expired transaction(s) before deadline:{}", transactionIds.size(), deadline);
+        }
+
+        return transactionIds;
     }
 
     public String getZSetKey(){
