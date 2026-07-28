@@ -443,45 +443,48 @@ VALIDATION_VPA_ALLOWED_HANDLES=okaxis,okhdfcbank,oksbi,okicici,ybl,axl,ibl,paytm
 
 ### 3. Start infrastructure
 
+payflo ships with a single cross-platform startup script that validates Docker, brings up all containers via `docker compose up -d --wait` (blocking until every service reports healthy), and then runs Kafka topic initialization automatically — no manual per-topic commands needed.
+
+**Linux / macOS / Git Bash:**
 ```bash
-docker compose up -d
+./scripts/start-dev.sh
 ```
 
-This brings up Kafka (KRaft mode), MySQL, and Redis.
-
-> **Windows / Git Bash:** prefix Docker commands with `MSYS_NO_PATHCONV=1` to prevent path mangling into Windows-style paths.
-
-### 4. Create Kafka topics
-
-Topic creation is a deliberate, separate infrastructure step (not part of Compose or `application.yml`), since partition count is fixed at creation and must not change under an in-flight system:
-
-```bash
-MSYS_NO_PATHCONV=1 docker exec -it <kafka_container_name> \
-  /opt/kafka/bin/kafka-topics.sh --create \
-  --topic payflo.payment-initiated \
-  --bootstrap-server localhost:9092 \
-  --partitions 3 --replication-factor 1
+**Windows (cmd):**
+```bat
+scripts\start-dev.bat
 ```
 
-Repeat for all 9 topics listed in [Kafka Topics](#kafka-topics).
+This single command:
+1. Validates the Docker CLI and daemon are available.
+2. Starts Kafka (KRaft mode), MySQL, and Redis via Docker Compose, waiting up to `WAIT_TIMEOUT_SECONDS` (default `180`) for all healthchecks to pass.
+3. Runs `create-kafka-topics.sh` / `.bat`, which creates any of the 9 required topics that don't already exist (`--if-not-exists`) — safe to re-run, existing topics are left untouched.
 
-### 5. Build the application
+> Both scripts are idempotent — safe to run again if a previous attempt failed partway, or any time you want to ensure the environment is up.
 
+If you only need to (re)create topics against an already-running Kafka container (e.g. after a `docker compose down` without a volume wipe, or to pick up a new topic added later), run the topic script standalone instead of the full `start-dev`:
+
+```bash
+./scripts/create-kafka-topics.sh      # Linux / macOS / Git Bash
+scripts\create-kafka-topics.bat       # Windows
+```
+
+Override defaults via environment variables if needed: `KAFKA_CONTAINER` (default `payflo-kafka`), `BOOTSTRAP_SERVER` (default `localhost:9092`), `KAFKA_TOPIC_PARTITIONS` (default `3`), `KAFKA_TOPIC_REPLICATION_FACTOR` (default `1`).
+
+### 4. Build the application
 ```bash
 mvn clean install
 ```
 
-### 6. Run the application
-
+### 5. Run the application
 ```bash
 mvn spring-boot:run
 ```
 
-### 7. Verify services
-
+### 6. Verify services
 ```bash
 # Kafka topics
-MSYS_NO_PATHCONV=1 docker exec -it <kafka_container_name> \
+MSYS_NO_PATHCONV=1 docker exec -it payflo-kafka \
   /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092
 
 # Redis
