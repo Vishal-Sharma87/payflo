@@ -30,18 +30,22 @@ public class CardValidator implements PaymentValidator<CardDetails> {
         YearMonth expiry = cardDetails.expiry();
 
         if (!cardNumberPattern.matcher(cardNumber).matches()){
+            log.warn("Validation rejected for payment details type:{} errorCode:{}", cardDetails.type(), ErrorCode.INVALID_CARD_NUMBER_FORMAT);
             throw new InvalidCardDetailsException(exceptionMessages.invalidCardNumberFormat(), ErrorCode.INVALID_CARD_NUMBER_FORMAT);
         }
 
         if(!cvvPattern.matcher(cvv).matches()){
+            log.warn("Validation rejected for payment details type:{} errorCode:{}", cardDetails.type(), ErrorCode.INVALID_CVV_FORMAT);
             throw new InvalidCardDetailsException(exceptionMessages.invalidCvvFormat(), ErrorCode.INVALID_CVV_FORMAT);
         }
 
         if(YearMonth.now().isAfter(expiry)){
+            log.warn("Validation rejected for payment details type:{} errorCode:{}", cardDetails.type(), ErrorCode.EXPIRED_CARD);
             throw new InvalidCardDetailsException(exceptionMessages.expiredCard(), ErrorCode.EXPIRED_CARD);
         }
 
         if(!isValidLuhn(cardNumber)){
+            log.warn("Validation rejected for payment details type:{} errorCode:{}", cardDetails.type(), ErrorCode.INVALID_CARD_NUMBER);
             throw new InvalidCardDetailsException(exceptionMessages.invalidCardNumber(), ErrorCode.INVALID_CARD_NUMBER);
         }
     }
