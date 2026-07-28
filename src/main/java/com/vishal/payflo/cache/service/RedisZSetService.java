@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Set;
-import java.util.UUID;
 
 @Service
 public class RedisZSetService {
@@ -26,22 +25,6 @@ public class RedisZSetService {
         this.redisKeysProperties = redisKeysProperties;
     }
 
-    public void createEntry(UUID transactionId, Instant startedAt) {
-        String zsetKey = getZSetKey();
-        long score = calculateScore(startedAt);
-        String member = transactionId.toString();
-
-        redisZSetRepository.put(zsetKey, score, member);
-    }
-
-    public void remove(UUID transactionId) {
-        String zsetKey = getZSetKey();
-        String member = transactionId.toString();
-
-        redisZSetRepository.remove(zsetKey, member);
-    }
-
-
     public Set<String> findExpiredTransactionBefore(Instant deadline) {
         String zsetKey = getZSetKey();
         long maxScore = deadline.toEpochMilli();
@@ -58,7 +41,7 @@ public class RedisZSetService {
      * it should be considered timed out, expressed as epoch millis.
      * Score = startedAt + configured timeout buffer.
      */
-    private long calculateScore(Instant startedAt){
+    public long calculateScore(Instant startedAt){
         int minutesToAdd = paymentTimeoutProperties.timeoutBufferMinutes();
         return startedAt.plus(Duration.ofMinutes(minutesToAdd)).toEpochMilli();
     }
