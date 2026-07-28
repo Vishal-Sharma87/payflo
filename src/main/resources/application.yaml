@@ -87,3 +87,16 @@
 
     scheduler:
       transaction-monitor-fixed-delay-ms: ${TRANSACTION_MONITOR_FIXED_DELAY_MS}
+
+
+  logging:
+    level:
+      root: INFO
+      org.apache.kafka: WARN
+      org.apache.kafka.clients.producer: WARN
+      org.apache.kafka.clients.consumer: WARN
+      org.apache.kafka.common.utils.AppInfoParser: WARN
+      org.springframework.kafka: WARN
+      com.vishal.payflo: INFO
+      org.hibernate.SQL: DEBUG
+
