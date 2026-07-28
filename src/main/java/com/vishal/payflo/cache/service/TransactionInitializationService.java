@@ -2,6 +2,7 @@ package com.vishal.payflo.cache.service;
 
 import com.vishal.payflo.cache.repository.TransactionInitializationRepository;
 import com.vishal.payflo.cache.scripts.LuaScripts;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
@@ -12,6 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
+@Slf4j
 public class TransactionInitializationService {
 
     private final RedisHashService hashService;
@@ -39,5 +41,6 @@ public class TransactionInitializationService {
         String score = String.valueOf(zSetService.calculateScore(startedAt));
 
         transactionInitializationRepository.initialize(initializeScript, keys, score, member);
+        log.info("Transaction initialization completed for transactionId:{}", transactionId);
     }
 }
