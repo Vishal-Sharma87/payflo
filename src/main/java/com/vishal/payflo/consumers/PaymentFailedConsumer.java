@@ -45,8 +45,10 @@ public class PaymentFailedConsumer {
     public void consumePaymentFailedEvent(PaymentFailedEvent paymentFailedEvent){
         UUID transactionId = paymentFailedEvent.transactionId();
         KafkaTopic topic = paymentFailedEvent.topic();
+        log.info("Received payment event for transactionId:{} topic:{}", transactionId, topic);
 
         if(transactionOwnershipService.tryClaim(transactionId, TransactionStatus.TIMED_OUT_PENDING)){
+            log.info("Processing transactionId:{}", transactionId);
             paymentTransactionService.markPaymentTransactionFailed(transactionId);
 
             String message = notificationMessageTemplateBuilder.build(topic, transactionId);
@@ -54,6 +56,9 @@ public class PaymentFailedConsumer {
             eventPublisher.publish(paymentEvent);
 
             redisHashService.finalizeStatus(transactionId, TransactionStatus.FAILED);
+            log.info("Transaction finalized as FAILED for transactionId:{}", transactionId);
+        } else {
+            log.warn("Skipping transactionId:{} because ownership was not claimed", transactionId);
         }
 
     }
