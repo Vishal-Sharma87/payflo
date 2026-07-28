@@ -26,6 +26,7 @@ public class PaymentTimedOutNotificationConsumer {
         KafkaTopic kafkaTopic = paymentTimedOutNotificationEvent.topic();
         String payload = paymentTimedOutNotificationEvent.payload();
 
+        log.info("Received notification event for transactionId:{} topic:{}", transactionId, kafkaTopic);
         notificationPublisher.publish(transactionId, payload, kafkaTopic);
     }
 
