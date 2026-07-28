@@ -110,11 +110,10 @@ PAYMENT_TIMED_OUT_NOTIFICATION_HASH_KEY=notification:payment-timed-out
 # *******************      Kafka Configs           *********************
 
 
-# Kafka consumer group identifier.
-KAFKA_CONSUMER_GROUP_ID=payflo-group
 
-# Packages trusted for Kafka message deserialization.
-KAFKA_TRUSTED_PACKAGES=com.vishal.payflo.models
+KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+KAFKA_GROUP_ID=payflo-consumer-group
+KAFKA_TRUSTED_PACKAGES=com.vishal.payflo.kafka.events
 
 # Docker container name used by startup scripts.
 KAFKA_CONTAINER=payflo-kafka
@@ -123,8 +122,6 @@ KAFKA_CONTAINER=payflo-kafka
 # Change only when creating a completely new Kafka cluster.
 KAFKA_CLUSTER_ID=a5ff53ea-345d-4661-bf5e-51b3a696265c
 
-# Kafka broker address used by Spring Boot and startup scripts.
-BOOTSTRAP_SERVER=localhost:9092
 
 
 # ****************          Kafka topic configs           *********************
