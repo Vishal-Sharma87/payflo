@@ -36,7 +36,7 @@
 
 - **Decoupling** — the REST layer never blocks on downstream processing; it fires an event and returns.
 - **Independent scalability** — consumers for validation, persistence, and notification scale independently of the API layer.
-- **Natural audit trail** — the event log *is* the history of what happened to a transaction.
+- **Natural audit trail** — the event log _is_ the history of what happened to a transaction.
 - **Resilience** — a slow or crashed consumer doesn't take down the API; messages wait in the topic.
 
 The project exists to build genuine fluency with these mechanics — partition-key ordering, consumer group rebalancing, offset management, dead-letter routing, idempotent processing — using a **self-managed Kafka cluster (KRaft mode, no Zookeeper, no managed Confluent Cloud)**, so every piece of infrastructure is understood rather than assumed.
@@ -47,14 +47,14 @@ The project exists to build genuine fluency with these mechanics — partition-k
 
 - **Polymorphic payment initiation** — UPI and Card payment types via a sealed-interface + Jackson-discriminator model, each with independent, extensible validation (VPA format + PSP handle validation; Luhn's algorithm + expiry + CVV validation for cards).
 - **Fully event-driven lifecycle** — 8 Kafka topics across payment-lifecycle and notification event groups, with dedicated consumers for each stage.
-- **Idempotent consumers** — insert-only persistence semantics (`EntityManager.persist()`) guarantee duplicate Kafka deliveries never produce duplicate side effects.
+- **Idempotent consumers** — insert-only persistence semantics (`EntityManager.persist()`) guarantee duplicate Kafka deliveries never produce duplicate side effects on the initiating write; termination writes are naturally idempotent updates.
 - **Redis-backed status reads** — MySQL is durable storage only; the hot-path status API reads exclusively from Redis, keeping the database off the request-serving critical path.
 - **Sorted-set-driven timeout detection** — a scheduler queries a Redis sorted set for transactions past their deadline and fires a `payment-timed-out` event, with a dedicated consumer owning the actual state transition.
+- **Atomic partial-write & race-condition hardening** — a Lua-based atomic check-and-set (`TransactionOwnershipService`) resolves the race between competing termination consumers (`payment-received` vs. `payment-timed-out`) and guards against partial-write inconsistency, with notification delivery treated as at-least-once by design.
 - **Centralized, typed configuration** — every topic name, error message, status message, notification template, and infrastructure property is externalized via `@ConfigurationProperties` records, never hardcoded.
 - **Structured exception handling** — a single `PayfloException` hierarchy with per-scenario `ErrorCode`s, resolved by a global `@RestControllerAdvice` into a consistent client-facing error contract.
 - **Dead-letter routing** — malformed or undecodable messages are automatically routed to a shared DLT via `DeadLetterPublishingRecoverer`.
 - **TTL-based Redis self-cleanup** — terminal transaction states automatically expire out of Redis after a configurable retention window, no separate cleanup job required.
-- **Planned:** Atomic Redis check-and-set (Lua) for full partial-write/race-condition hardening (Phase 4.4).
 
 ---
 
@@ -62,276 +62,215 @@ The project exists to build genuine fluency with these mechanics — partition-k
 
 payflo is a **single Spring Boot monolith** — microservices were explicitly rejected to keep the entire learning focus on Kafka behavior rather than distributed-deployment concerns. The monolith is internally organized by strict separation of concerns: REST controllers never touch Kafka directly, services never contain persistence logic, and consumers own all state-transition business logic.
 
-| Layer                   | Responsibility                                                                                                     |
-|-------------------------|--------------------------------------------------------------------------------------------------------------------|
-| **Client**              | Sends payment requests, polls status                                                                               |
-| **REST API**            | Accepts requests, validates structurally, fires initiating events — never blocks on downstream processing          |
-| **Producers**           | `EventPublisher` — single, centralized publish path for every event in the system                                  |
-| **Message Broker**      | Self-managed Apache Kafka (KRaft mode) — 8 topics across 2 lifecycle groups + 1 shared DLT                         |
-| **Consumers**           | One consumer per event type — own all business logic, persistence, and cache mutation                              |
-| **Database**            | MySQL — durable, authoritative transaction record; no longer queried on the status-read hot path                   |
-| **Cache**               | Redis — hash for O(1) status lookups, sorted set for timeout-range queries                                         |
-| **Scheduler**           | `TransactionMonitoringSchedular` — pure trigger; detects expired transactions and fires an event, owns no mutation |
-| **Notification system** | Dedicated notification consumers per lifecycle stage — currently log/print, structurally ready for real dispatch   |
+**Layer responsibilities:**
 
-```mermaid
-flowchart TB
-    Client([Client])
+- **Client** — sends payment requests, polls status.
+- **REST API** — accepts requests, validates structurally, fires initiating events. Never blocks on downstream processing.
+- **Producers** (`EventPublisher`) — single, centralized publish path for every event in the system.
+- **Message Broker** — self-managed Apache Kafka (KRaft mode); 8 topics across 2 lifecycle groups, plus 1 shared DLT.
+- **Consumers** — one consumer per event type; own all business logic, persistence, and cache mutation.
+- **Database (MySQL)** — durable, authoritative transaction record; not queried on the status-read hot path.
+- **Cache (Redis)** — hash for O(1) status lookups, sorted set for timeout-range queries.
+- **Scheduler** (`TransactionMonitoringSchedular`) — pure trigger; detects expired transactions and fires an event, owns no mutation.
+- **Notification system** — dedicated notification consumers per lifecycle stage, currently log/print, structurally ready for real dispatch.
 
-    subgraph API["REST API Layer"]
-        C1[PaymentOptionsController]
-        C2[PaymentInitiationController]
-        C3[PaymentGatewayController]
-        C4[PaymentStatusController]
-    end
+**Request → event flow, end to end:**
 
-    subgraph Services["Service Layer"]
-        S1[PaymentInitiationService]
-        S2[PaymentGatewayService]
-        S3[PaymentStatusService]
-        V[PaymentDetailsValidatorService]
-    end
-
-    EP[EventPublisher]
-
-    subgraph Kafka["Apache Kafka (KRaft)"]
-        T1[payflo.payment-initiated]
-        T2[payflo.payment-received]
-        T3[payflo.payment-failed]
-        T4[payflo.payment-timed-out]
-        T5[payflo.notification.*]
-        DLT[(payflo.DLT)]
-    end
-
-    subgraph Consumers["Consumer Layer"]
-        CO1[PaymentInitiatedConsumer]
-        CO2[PaymentReceivedConsumer]
-        CO3[PaymentFailedConsumer]
-        CO4[PaymentTimedOutConsumer]
-        CN[Notification Consumers x4]
-    end
-
-    subgraph Storage
-        DB[(MySQL)]
-        subgraph Redis
-            RH[Hash: status]
-            RZ[Sorted Set: by-started-at]
-        end
-    end
-
-    SCH[TransactionMonitoringSchedular]
-
-    Client -->|POST /payment/initiate| C2 --> S1 --> V
-    Client -->|POST /payment/confirm| C3 --> S2
-    Client -->|GET /payment/status/id| C4 --> S3
-    Client -->|GET /payment/options| C1
-
-    S1 -->|publish| EP
-    S2 -->|publish| EP
-    EP --> T1
-    EP --> T2
-    EP --> T3
-
-    T1 --> CO1
-    T2 --> CO2
-    T3 --> CO3
-    T4 --> CO4
-
-    CO1 -->|hash + zset write| Redis
-    CO1 -->|insert| DB
-    CO1 -->|publish notification| T5
-
-    CO2 -->|finalize status + TTL| RH
-    CO2 -->|remove| RZ
-    CO2 -->|update| DB
-    CO2 -->|publish notification| T5
-
-    CO3 -->|finalize status + TTL| RH
-    CO3 -->|remove| RZ
-    CO3 -->|update| DB
-    CO3 -->|publish notification| T5
-
-    CO4 -->|finalize status + TTL| RH
-    CO4 -->|remove| RZ
-    CO4 -->|update| DB
-    CO4 -->|publish notification| T5
-
-    T5 --> CN
-
-    SCH -->|ZRANGEBYSCORE| RZ
-    SCH -->|publish timed-out event| T4
-
-    S3 -->|read status| RH
-
-    Kafka -.->|deserialization failure| DLT
-```
+1. Client calls a REST endpoint (`/payment/initiate`, `/payment/confirm`, `/payment/status/{id}`, `/payment/options`).
+2. The corresponding controller delegates to its service, which validates (for initiate) and calls `EventPublisher.publish(...)`.
+3. `EventPublisher` resolves the target topic via `KafkaTopicResolver` and sends through a shared `KafkaTemplate`.
+4. The matching consumer (one per event type) picks up the message, executes its business logic — MySQL write, Redis hash/zset update via `TransactionOwnershipService`/`TransactionInitializationService`, then publishes a notification event.
+5. A dedicated notification consumer receives that event and dispatches it (currently log/print), with a Redis-backed dedup flag to minimize duplicate sends under redelivery.
+6. Independently, `TransactionMonitoringSchedular` polls the Redis sorted set on a fixed delay, and for every transaction past its deadline, publishes a `PaymentTimedOutEvent` — which flows through the same termination-consumer path as steps 4–5.
+7. Any message that fails deserialization is routed straight to the shared `payflo.DLT`, regardless of which topic it came from.
 
 ---
 
 ## Payment Lifecycle
 
-```mermaid
-sequenceDiagram
-    participant Client
-    participant API as REST API
-    participant Val as Validator
-    participant EP as EventPublisher
-    participant Kafka
-    participant Init as PaymentInitiatedConsumer
-    participant Redis
-    participant DB as MySQL
-    participant Term as Termination Consumer
-    participant Sched as TransactionMonitoringSchedular
+**Happy path — successful payment:**
 
-    Client->>API: POST /payment/initiate
-    API->>Val: validate(paymentDetails)
-    Val-->>API: OK
-    API->>EP: publish(PaymentInitiatedEvent)
-    EP->>Kafka: payflo.payment-initiated
-    API-->>Client: 200 OK { transactionId, message }
+| Step | Actor                        | Action                                                                                                                                    |
+| ---- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | Client                       | `POST /payment/initiate`                                                                                                                  |
+| 2    | API → Validator              | Structural validation (VPA/card format)                                                                                                   |
+| 3    | API → EventPublisher → Kafka | Publishes `PaymentInitiatedEvent` to `payflo.payment-initiated`                                                                           |
+| 4    | API → Client                 | Returns `200 OK` with `transactionId` — no state change confirmed yet                                                                     |
+| 5    | `PaymentInitiatedConsumer`   | Writes Redis hash (`status=PROCESSING`) + zset entry, persists to MySQL (insert), publishes initiation notification                       |
+| 6    | Client                       | `GET /payment/status/{id}` → reads `PROCESSING` from Redis                                                                                |
+| 7    | Client                       | `POST /payment/confirm` (mocked gateway callback)                                                                                         |
+| 8    | API → EventPublisher → Kafka | Publishes `PaymentReceivedEvent` (or `PaymentFailedEvent`), returns `202 Accepted`, no body                                               |
+| 9    | Termination consumer         | Atomically claims ownership (Lua CAS), updates MySQL, publishes completion notification, finalizes Redis status + TTL, removes zset entry |
+| 10   | Client                       | `GET /payment/status/{id}` → reads `COMPLETED` from Redis                                                                                 |
+| 11   | (later)                      | Redis key TTL expires → subsequent status check returns `404 Transaction Not Found`                                                       |
 
-    Kafka->>Init: consume PaymentInitiatedEvent
-    Init->>Redis: HSET status=PROCESSING
-    Init->>Redis: ZADD score=startedAt+buffer
-    Init->>DB: persist transaction (insert-only)
-    Init->>Kafka: publish notification event
+**Timeout path — independent of the happy path:**
 
-    Client->>API: GET /payment/status/{id}
-    API->>Redis: HGET status
-    Redis-->>API: PROCESSING
-    API-->>Client: 200 { status, message }
-
-    Note over Client,Kafka: Gateway callback (mocked)
-    Client->>API: POST /payment/confirm
-    API->>EP: publish(PaymentReceivedEvent or PaymentFailedEvent)
-    EP->>Kafka: payflo.payment-received / payflo.payment-failed
-    API-->>Client: 202 Accepted
-
-    Kafka->>Term: consume terminal event
-    Term->>Redis: HSET status=COMPLETED/FAILED + EXPIRE
-    Term->>Redis: ZREM member
-    Term->>DB: update status
-    Term->>Kafka: publish notification event
-
-    Note over Sched,Redis: Independent timeout path
-    loop every fixedDelay
-        Sched->>Redis: ZRANGEBYSCORE 0..now
-        Redis-->>Sched: expired transactionIds
-        Sched->>Kafka: publish PaymentTimedOutEvent per id
-    end
-    Kafka->>Term: consume PaymentTimedOutEvent
-    Term->>Redis: HSET status=TIMED_OUT + EXPIRE
-    Term->>Redis: ZREM member
-    Term->>DB: update status
-    Term->>Kafka: publish notification event
-
-    Client->>API: GET /payment/status/{id}
-    API->>Redis: HGET status (miss after TTL expiry)
-    Redis-->>API: null
-    API-->>Client: 404 Transaction Not Found
-```
+| Step | Actor                            | Action                                                                                                                                                                    |
+| ---- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `TransactionMonitoringSchedular` | Every `fixedDelay` interval, queries the Redis sorted set for entries scored before now                                                                                   |
+| 2    | Scheduler → Kafka                | Publishes a `PaymentTimedOutEvent` per expired `transactionId` — pure trigger, no mutation                                                                                |
+| 3    | `PaymentTimedOutConsumer`        | Same ownership-claim + finalize flow as any other termination consumer — competes fairly against a late-arriving `payment-received`/`payment-failed` via the same Lua CAS |
 
 ---
 
 ## Event Catalog
 
-| Event                               | Producer                         | Consumer                   | Purpose                                                                                                                                                                                                                                                               | Topic                                   |
-|-------------------------------------|----------------------------------|----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------|
-| `PaymentInitiatedEvent`             | `PaymentInitiationService`       | `PaymentInitiatedConsumer` | Fired when a structurally-valid payment request is accepted. Carries `transactionId`, `amount`, `paymentType`, `startedAt` — `startedAt` is the customer-facing clock start, used later for timeout scoring.                                                          | `payflo.payment-initiated`              |
-| `PaymentReceivedEvent`              | `PaymentGatewayService`          | `PaymentReceivedConsumer`  | Fired when the (mocked) gateway callback reports success. Terminates the transaction as `COMPLETED`.                                                                                                                                                                  | `payflo.payment-received`               |
-| `PaymentFailedEvent`                | `PaymentGatewayService`          | `PaymentFailedConsumer`    | Fired when the gateway callback reports failure. Terminates the transaction as `FAILED`.                                                                                                                                                                              | `payflo.payment-failed`                 |
-| `PaymentTimedOutEvent`              | `TransactionMonitoringSchedular` | `PaymentTimedOutConsumer`  | Fired by the scheduler for any transaction whose Redis sorted-set score has passed. Carries only `transactionId` — the deadline itself is derivable from `startedAt` (in MySQL) + the configured buffer, so it is deliberately not duplicated into the event payload. | `payflo.payment-timed-out`              |
-| `PaymentInitiatedNotificationEvent` | `PaymentInitiatedConsumer`       | Notification consumer      | Fired after the initiated-consumer's primary work completes. Message resolved from a template keyed by the *triggering* event's topic.                                                                                                                                | `payflo.notification.payment-initiated` |
-| `PaymentCompletedNotificationEvent` | `PaymentReceivedConsumer`        | Notification consumer      | User-facing "payment successful" notification.                                                                                                                                                                                                                        | `payflo.notification.payment-completed` |
-| `PaymentFailedNotificationEvent`    | `PaymentFailedConsumer`          | Notification consumer      | User-facing "payment failed" notification.                                                                                                                                                                                                                            | `payflo.notification.payment-failed`    |
-| `PaymentTimedOutNotificationEvent`  | `PaymentTimedOutConsumer`        | Notification consumer      | User-facing "payment timed out" notification.                                                                                                                                                                                                                         | `payflo.notification.payment-timed-out` |
+All 8 event records implement a shared `PaymentEvent` interface exposing `topic()` and `key()`, published through a single `EventPublisher.publish(PaymentEvent)` method — no per-event publishing boilerplate.
 
-> All 8 event records implement a shared `PaymentEvent` interface exposing `topic()` and `key()`, published through a single `EventPublisher.publish(PaymentEvent)` method — no per-event publishing boilerplate.
+### `PaymentInitiatedEvent`
+
+**Producer:** `PaymentInitiationService` · **Consumer:** `PaymentInitiatedConsumer` · **Topic:** `payflo.payment-initiated`
+
+Fired when a structurally-valid payment request is accepted. Carries `transactionId`, `amount`, `paymentType`, and `startedAt` — `startedAt` is the customer-facing clock start, used later for timeout scoring against the Redis sorted set.
+
+### `PaymentReceivedEvent`
+
+**Producer:** `PaymentGatewayService` · **Consumer:** `PaymentReceivedConsumer` · **Topic:** `payflo.payment-received`
+
+Fired when the (mocked) gateway callback reports success. Terminates the transaction as `COMPLETED`, after winning the atomic ownership claim against any competing termination event for the same transaction.
+
+### `PaymentFailedEvent`
+
+**Producer:** `PaymentGatewayService` · **Consumer:** `PaymentFailedConsumer` · **Topic:** `payflo.payment-failed`
+
+Fired when the gateway callback reports failure. Terminates the transaction as `FAILED`, under the same ownership-claim protection as every other termination path.
+
+### `PaymentTimedOutEvent`
+
+**Producer:** `TransactionMonitoringSchedular` · **Consumer:** `PaymentTimedOutConsumer` · **Topic:** `payflo.payment-timed-out`
+
+Fired by the scheduler for any transaction whose Redis sorted-set score has passed. Carries only `transactionId` — the deadline itself is derivable from `startedAt` (in MySQL) plus the configured buffer, so it's deliberately not duplicated into the event payload.
+
+### `PaymentInitiatedNotificationEvent`
+
+**Producer:** `PaymentInitiatedConsumer` · **Consumer:** Notification consumer · **Topic:** `payflo.notification.payment-initiated`
+
+Fired after the initiated-consumer's primary work completes. Message resolved from a template keyed by the _triggering_ event's topic.
+
+### `PaymentCompletedNotificationEvent`
+
+**Producer:** `PaymentReceivedConsumer` · **Consumer:** Notification consumer · **Topic:** `payflo.notification.payment-completed`
+
+User-facing "payment successful" notification.
+
+### `PaymentFailedNotificationEvent`
+
+**Producer:** `PaymentFailedConsumer` · **Consumer:** Notification consumer · **Topic:** `payflo.notification.payment-failed`
+
+User-facing "payment failed" notification.
+
+### `PaymentTimedOutNotificationEvent`
+
+**Producer:** `PaymentTimedOutConsumer` · **Consumer:** Notification consumer · **Topic:** `payflo.notification.payment-timed-out`
+
+User-facing "payment timed out" notification.
 
 ---
 
 ## Kafka Topics
 
-| Topic                                   | Producer                                          | Consumer                   | Description                                     |
-|-----------------------------------------|---------------------------------------------------|----------------------------|-------------------------------------------------|
-| `payflo.payment-initiated`              | `PaymentInitiationService`                        | `PaymentInitiatedConsumer` | Entry point of the lifecycle                    |
-| `payflo.payment-received`               | `PaymentGatewayService`                           | `PaymentReceivedConsumer`  | Success termination                             |
-| `payflo.payment-failed`                 | `PaymentGatewayService`                           | `PaymentFailedConsumer`    | Failure termination                             |
-| `payflo.payment-timed-out`              | `TransactionMonitoringSchedular`                  | `PaymentTimedOutConsumer`  | Timeout termination                             |
-| `payflo.notification.payment-initiated` | `PaymentInitiatedConsumer`                        | Notification consumer      | Initiation notice                               |
-| `payflo.notification.payment-completed` | `PaymentReceivedConsumer`                         | Notification consumer      | Success notice                                  |
-| `payflo.notification.payment-failed`    | `PaymentFailedConsumer`                           | Notification consumer      | Failure notice                                  |
-| `payflo.notification.payment-timed-out` | `PaymentTimedOutConsumer`                         | Notification consumer      | Timeout notice                                  |
-| `payflo.DLT`                            | Kafka framework (`DeadLetterPublishingRecoverer`) | — (manual inspection)      | Shared dead-letter target for every topic above |
+| Topic                                   | Producer                                          | Consumer                   |
+| --------------------------------------- | ------------------------------------------------- | -------------------------- |
+| `payflo.payment-initiated`              | `PaymentInitiationService`                        | `PaymentInitiatedConsumer` |
+| `payflo.payment-received`               | `PaymentGatewayService`                           | `PaymentReceivedConsumer`  |
+| `payflo.payment-failed`                 | `PaymentGatewayService`                           | `PaymentFailedConsumer`    |
+| `payflo.payment-timed-out`              | `TransactionMonitoringSchedular`                  | `PaymentTimedOutConsumer`  |
+| `payflo.notification.payment-initiated` | `PaymentInitiatedConsumer`                        | Notification consumer      |
+| `payflo.notification.payment-completed` | `PaymentReceivedConsumer`                         | Notification consumer      |
+| `payflo.notification.payment-failed`    | `PaymentFailedConsumer`                           | Notification consumer      |
+| `payflo.notification.payment-timed-out` | `PaymentTimedOutConsumer`                         | Notification consumer      |
+| `payflo.DLT`                            | Kafka framework (`DeadLetterPublishingRecoverer`) | Manual inspection only     |
 
-**Partitioning strategy** — every event is keyed by `transactionId`, guaranteeing all events for a single transaction land on the same partition and are processed in strict order by a single consumer thread. Partition count is treated as fixed at creation time — changing it later would break `hash(key) % N` ordering guarantees for any in-flight transaction, so topic creation is a deliberate, separate infrastructure step, not baked into Docker Compose or `application.yml`.
+**Partitioning strategy.** Every event is keyed by `transactionId`, guaranteeing all events for a single transaction land on the same partition and are processed in strict order by a single consumer thread. Partition count is treated as fixed at creation time — changing it later would break `hash(key) % N` ordering guarantees for any in-flight transaction, so topic creation is a deliberate, separate infrastructure step, not baked into Docker Compose or `application.yml`.
 
-**Ordering guarantees** — per-key ordering only (Kafka's native guarantee); no global ordering across different transactions, which is the correct and sufficient guarantee for this domain.
+**Ordering guarantees.** Per-key ordering only (Kafka's native guarantee); no global ordering across different transactions, which is the correct and sufficient guarantee for this domain.
 
-**Consumer groups** — each consumer type runs in its own consumer group, so lifecycle consumers and notification consumers scale and rebalance independently.
+**Consumer groups.** Each consumer type runs in its own consumer group, so lifecycle consumers and notification consumers scale and rebalance independently.
 
-**Retry handling** — deserialization failures are non-retryable by nature (a malformed payload will never deserialize successfully) and are routed directly to the DLT rather than retried in a loop.
+**Retry handling.** Deserialization failures are non-retryable by nature (a malformed payload will never deserialize successfully) and are routed directly to the DLT rather than retried in a loop.
 
-**Dead-letter topics** — a single shared `payflo.DLT` receives any message that fails deserialization, using Spring Kafka's `DeadLetterPublishingRecoverer`. Payloads that fail due to trusted-package/class-name mismatches are republished as raw base64 bytes, since the value deserializer itself couldn't decode them.
+**Dead-letter topics.** A single shared `payflo.DLT` receives any message that fails deserialization, using Spring Kafka's `DeadLetterPublishingRecoverer`. Payloads that fail due to trusted-package/class-name mismatches are republished as raw base64 bytes, since the value deserializer itself couldn't decode them.
 
-**Idempotency** — every consumer relies on `EntityManager.persist()` (not `JpaRepository.save()`) for MySQL writes, catching `DataIntegrityViolationException` on a duplicate delivery. `save()` was explicitly rejected because it performs a silent select-then-merge for manually-assigned IDs (UUIDv7), which would silently overwrite rather than reject a duplicate.
+**Idempotency.** The initiating consumer relies on `EntityManager.persist()` (not `JpaRepository.save()`) for its MySQL insert, catching `DataIntegrityViolationException` on a duplicate delivery. `save()` was explicitly rejected because it performs a silent select-then-merge for manually-assigned IDs (UUIDv7), which would silently overwrite rather than reject a duplicate. Termination consumers instead perform an idempotent `UPDATE` — safe to rerun with the same value on redelivery — protected at the Redis layer by an atomic ownership claim rather than a DB-level uniqueness check.
 
 ---
 
 ## System Components
 
 ### REST API
+
 Four `@RestController` classes (`PaymentOptionsController`, `PaymentInitiationController`, `PaymentGatewayController`, `PaymentStatusController`), all sharing the `/payment/*` namespace. Split by single-responsibility-per-class, not by URL fragmentation — the client sees one coherent `/payment` resource. Confirmed at the framework level that Spring detects true path+method collisions at startup (`IllegalStateException: Ambiguous mapping`), so class-splitting carries no silent-routing risk.
 
 ### Producer Layer
+
 `EventPublisher` — one method, `publish(PaymentEvent)`, resolves the target topic via `KafkaTopicResolver` and sends through a shared `KafkaTemplate`. Deliberately kept as a concrete, Kafka-only class rather than an interface with swappable broker implementations — a real design discussion was had (`@ConditionalOnProperty`, `@Primary`, `@Qualifier`), but concluded to be YAGNI for a Kafka-focused learning project with no intent to swap brokers.
 
 ### Kafka Infrastructure
-`KafkaTopic` (enum of all 9 topics including the DLT), `KafkaTopicsProperties` (`@ConfigurationProperties` record backing the enum with real topic-name strings from config), and `KafkaTopicResolver` (exhaustive switch bridging enum → string). This indirection exists specifically to eliminate typo/drift risk between code and topic configuration.
+
+`KafkaTopic` (enum of all 9 topics including the DLT), `KafkaTopicsProperties` (`@ConfigurationProperties` record backing the enum with real topic-name strings from config), and `KafkaTopicResolver` (exhaustive switch bridging enum → string). This indirection exists specifically to eliminate typo/drift risk between code and topic configuration — including the DLT's own topic name, previously a hardcoded literal, now resolved the same way as every other topic.
 
 ### Consumers
-One consumer class per event type, each owning 100% of that event's business logic — persistence, cache mutation, and notification-event construction. Notification consumers remain intentionally pure log/print, with zero business logic, to keep the notification *pipeline* structurally separate from notification *dispatch* (which is a planned future integration point).
+
+One consumer class per event type, each owning 100% of that event's business logic — persistence, cache mutation, and notification-event construction. Notification consumers remain intentionally pure log/print, with zero business logic, to keep the notification _pipeline_ structurally separate from notification _dispatch_ (which is a planned future integration point).
 
 ### Validation Layer
+
 `PaymentDetailsValidatorService` dispatches via an exhaustive pattern-matching `switch` (record deconstruction) to `UpiValidator` or `CardValidator` — two independently extensible validator classes implementing a shared `PaymentValidator<T>` interface. UPI validation runs a 5-step chain (case-normalization → separator-count check → identifier regex → PSP-handle-format regex → PSP-handle set-membership lookup). Card validation runs a 4-step chain (number-format regex → CVV-format regex → Luhn's algorithm → expiry check via `YearMonth`).
 
 ### Redis (Cache Layer)
+
 Two independently-reasoned service+repository pairs under `cache/`:
-- **`RedisHashService` / `RedisHashRepository`** — owns per-transaction status (`payflo:payment-transaction:{transactionId}` → `status` field). No TTL while pending; TTL applied only at terminal-state finalization, so completed records self-clean without a dedicated cleanup job.
+
+- **`RedisHashService` / `RedisHashRepository`** — owns per-transaction status (`payflo:payment-transaction:{transactionId}` → `status` field) and per-topic notification-sent flags. No TTL while pending; TTL applied only at terminal-state finalization, so completed records self-clean without a dedicated cleanup job.
 - **`RedisZSetService` / `RedisZSetRepository`** — owns the single global sorted set (`payflo:processing-payment-transactions:by-started-at`) used exclusively for timeout-range detection.
 
 Kept as two separate pairs (not one umbrella cache service) because status-tracking and timeout-tracking have different reasons to change, even though they currently share one underlying store.
 
+### Atomic Ownership & Initialization (Race-Condition Hardening)
+
+Two additional service+repository pairs, each backed by a parameterized Lua script executed atomically via `RedisTemplate.execute(RedisScript, ...)`:
+
+- **`TransactionOwnershipService` / `TransactionOwnershipRepository`** — used by all three termination consumers to atomically claim exclusive ownership of a transaction's termination, guarding against a cross-consumer race (e.g. `payment-received` and a late `payment-timed-out` firing for the same transaction) and against redelivery reprocessing a transaction that already finished. The same script is reused across all three consumers, parameterized only by which `*_PENDING` status to claim with.
+- **`TransactionInitializationService` / `TransactionInitializationRepository`** — used by `PaymentInitiatedConsumer` to atomically write the initial Redis hash entry and sorted-set entry in a single round trip. No ownership check is needed here, since this is the only consumer that ever creates these entries; the script exists purely to avoid two separate network round trips.
+
+Notification delivery itself is treated as **at-least-once, not exactly-once** — a deliberate accepted tradeoff, since no atomic mechanism can span an external Kafka publish. Duplicate-send risk is minimized (not eliminated) by pushing a dedup check to the notification-consumer, the layer closest to the actual side effect.
+
 ### MySQL
-Durable, authoritative record of every transaction. No longer part of the status-read hot path as of Phase 4.3 — Redis absorbs all status reads; MySQL exists purely for durability and (in principle) audit/reporting.
+
+Durable, authoritative record of every transaction. No longer part of the status-read hot path as of the Redis integration phase — Redis absorbs all status reads; MySQL exists purely for durability and (in principle) audit/reporting.
 
 ### Scheduler
+
 `TransactionMonitoringSchedular` — a deliberately thin, pure-trigger component. It queries Redis (`ZRANGEBYSCORE` up to now), and for every expired `transactionId`, constructs and publishes a `PaymentTimedOutEvent`. It performs **no mutation whatsoever** — all state transition is owned by `PaymentTimedOutConsumer`, keeping detection and business logic in separate, single-responsibility components. Runs on `@Scheduled(fixedDelayString = ...)`, chosen deliberately over `fixedRate` so each run only starts after the previous run has fully completed, giving natural cooldown headroom.
 
 ### Notification Module
-Four dedicated notification consumers, one per lifecycle-terminating event, each resolving a message template via `NotificationMessageResolver` keyed by the *triggering* event's topic (not the notification event's own topic — constructing the notification event requires the resolved message as a constructor argument, which would otherwise create a circular dependency).
+
+Four dedicated notification consumers, one per lifecycle-terminating event, each resolving a message template via `NotificationMessageResolver` keyed by the _triggering_ event's topic (not the notification event's own topic — constructing the notification event requires the resolved message as a constructor argument, which would otherwise create a circular dependency).
 
 ### Exception Handling
+
 An abstract `PayfloException` (carrying an `ErrorCode`) is the base for all domain exceptions. `GlobalExceptionHandler` (`@RestControllerAdvice`) provides both a generic fallback and specific handlers where HTTP status genuinely differs, and additionally normalizes two framework-level exceptions (`MethodArgumentTypeMismatchException`, `HttpMessageNotReadableException`) into the same `ErrorResponse` shape used everywhere else, so clients see one consistent error contract regardless of failure origin.
 
 ---
 
 ## Technology Stack
 
-| Category         | Choice                                                                                                                         |
-|------------------|--------------------------------------------------------------------------------------------------------------------------------|
-| Language         | Java 21                                                                                                                        |
-| Framework        | Spring Boot                                                                                                                    |
-| Database         | MySQL                                                                                                                          |
-| Cache            | Redis (self-managed, via Docker)                                                                                               |
-| Message Broker   | Apache Kafka — KRaft mode, `apache/kafka` image (self-managed, not Confluent Cloud)                                            |
-| Build Tool       | Maven                                                                                                                          |
-| Containerization | Docker + Docker Compose                                                                                                        |
-| Testing          | JUnit, Mockito                                                                                                                 |
-| API Testing      | Postman                                                                                                                        |
-| IDE              | IntelliJ IDEA                                                                                                                  |
-| Version Control  | Git / GitHub                                                                                                                   |
-| Key Libraries    | Jackson (`jackson-datatype-jsr310` for `YearMonth` support), Spring Data JPA, Spring Data Redis (Lettuce client), Spring Kafka |
+| Category         | Choice                                                                              |
+| ---------------- | ----------------------------------------------------------------------------------- |
+| Language         | Java 21                                                                             |
+| Framework        | Spring Boot                                                                         |
+| Database         | MySQL                                                                               |
+| Cache            | Redis (self-managed, via Docker)                                                    |
+| Message Broker   | Apache Kafka — KRaft mode, `apache/kafka` image (self-managed, not Confluent Cloud) |
+| Build Tool       | Maven                                                                               |
+| Containerization | Docker + Docker Compose                                                             |
+| Testing          | JUnit, Mockito                                                                      |
+| API Testing      | Postman                                                                             |
+| IDE              | IntelliJ IDEA                                                                       |
+| Version Control  | Git / GitHub                                                                        |
+
+**Key libraries:** Jackson (`jackson-datatype-jsr310` for `YearMonth` support), Spring Data JPA, Spring Data Redis (Lettuce client), Spring Kafka, Lombok (`@Slf4j`).
 
 ---
 
@@ -344,30 +283,32 @@ payflo/
 │   │
 │   ├── configs/
 │   │   ├── KafkaConfigs.java
-│   │   ├── RedisConfig.java
+│   │   ├── KafkaConnectionProperties.java
+│   │   ├── RedisConfigs.java
 │   │   ├── RedisConnectionProperties.java
 │   │   ├── RedisKeysProperties.java
 │   │   ├── RedisStatusTtlProperties.java
 │   │   ├── PaymentTimeoutProperties.java
-│   │   ├── VpaValidationProperties.java
+│   │   ├── VpaPaymentServiceProviderProperties.java
 │   │   ├── PaymentStatusMessagesProperties.java
 │   │   ├── ExceptionMessagesProperties.java
+│   │   ├── NotificationHashKeyProperties.java
 │   │   └── NotificationMessageProperties.java
 │   │
-│   ├── controller/
+│   ├── controllers/
 │   │   ├── PaymentOptionsController.java
 │   │   ├── PaymentInitiationController.java
 │   │   ├── PaymentGatewayController.java
 │   │   └── PaymentStatusController.java
 │   │
-│   ├── service/
+│   ├── services/
 │   │   ├── PaymentInitiationService.java
 │   │   ├── PaymentGatewayService.java
 │   │   ├── PaymentStatusService.java
-│   │   └── PaymentTransactionService.java
+│   │   ├── PaymentTransactionService.java
+│   │   └── PaymentDetailsValidatorService.java
 │   │
-│   ├── validation/
-│   │   ├── PaymentDetailsValidatorService.java
+│   ├── validators/
 │   │   ├── PaymentValidator.java
 │   │   ├── UpiValidator.java
 │   │   └── CardValidator.java
@@ -377,56 +318,60 @@ payflo/
 │   │   │   ├── KafkaTopic.java
 │   │   │   ├── KafkaTopicsProperties.java
 │   │   │   └── KafkaTopicResolver.java
-│   │   ├── events/
-│   │   │   ├── PaymentEvent.java
-│   │   │   ├── PaymentInitiatedEvent.java
-│   │   │   ├── PaymentReceivedEvent.java
-│   │   │   ├── PaymentFailedEvent.java
-│   │   │   ├── PaymentTimedOutEvent.java
-│   │   │   └── notification/*.java
-│   │   ├── consumers/
-│   │   │   ├── PaymentInitiatedConsumer.java
-│   │   │   ├── PaymentReceivedConsumer.java
-│   │   │   ├── PaymentFailedConsumer.java
-│   │   │   ├── PaymentTimedOutConsumer.java
-│   │   │   └── notification/*Consumer.java
+│   │   ├── events/*.java
 │   │   └── EventPublisher.java
+│   │
+│   ├── consumers/
+│   │   ├── PaymentInitiatedConsumer.java
+│   │   ├── PaymentReceivedConsumer.java
+│   │   ├── PaymentFailedConsumer.java
+│   │   ├── PaymentTimedOutConsumer.java
+│   │   └── *NotificationConsumer.java
 │   │
 │   ├── cache/
 │   │   ├── service/
 │   │   │   ├── RedisHashService.java
-│   │   │   └── RedisZSetService.java
-│   │   └── repository/
-│   │       ├── RedisHashRepository.java
-│   │       └── RedisZSetRepository.java
+│   │   │   ├── RedisZSetService.java
+│   │   │   ├── TransactionOwnershipService.java
+│   │   │   └── TransactionInitializationService.java
+│   │   ├── repository/
+│   │   │   ├── RedisHashRepository.java
+│   │   │   ├── RedisZSetRepository.java
+│   │   │   ├── TransactionOwnershipRepository.java
+│   │   │   └── TransactionInitializationRepository.java
+│   │   └── scripts/
+│   │       └── LuaScripts.java
+│   │
+│   ├── notifications/
+│   │   ├── NotificationPublisher.java
+│   │   ├── NotificationHashKeyResolver.java
+│   │   ├── NotificationMessageResolver.java
+│   │   └── NotificationMessageTemplateBuilder.java
 │   │
 │   ├── scheduled/
 │   │   └── TransactionMonitoringSchedular.java
 │   │
-│   ├── dto/
+│   ├── dtos/
 │   │   ├── ApiResponse.java
 │   │   ├── paymentdetails/
 │   │   │   ├── PaymentDetails.java
 │   │   │   ├── UpiDetails.java
 │   │   │   └── CardDetails.java
-│   │   ├── requestDto/
-│   │   │   ├── PaymentInitiateRequestDto.java
-│   │   │   └── PaymentConfirmRequestDto.java
-│   │   └── responseDto/
-│   │       ├── PaymentInitiateResponseDto.java
-│   │       ├── PaymentStatusResponseDto.java
-│   │       └── PaymentOptionsResponseDto.java
+│   │   ├── requestdtos/*.java
+│   │   └── responsedtos/*.java
 │   │
 │   ├── advice/
-│   │   ├── exceptions/
-│   │   │   ├── PayfloException.java
-│   │   │   ├── PaymentTransactionNotFoundException.java
-│   │   │   ├── InvalidVpaException.java
-│   │   │   └── InvalidCardDetailsException.java
+│   │   ├── exceptions/*.java
 │   │   ├── enums/
 │   │   │   └── ErrorCode.java
 │   │   ├── ErrorResponse.java
 │   │   └── GlobalExceptionHandler.java
+│   │
+│   ├── entities/
+│   │   └── PaymentTransaction.java
+│   │
+│   ├── repositories/
+│   │   └── PaymentTransactionRepository.java
 │   │
 │   └── enums/
 │       ├── TransactionStatus.java
@@ -446,18 +391,22 @@ payflo/
 ## Local Setup
 
 ### Prerequisites
+
 - Java 21+
 - Maven
 - Docker & Docker Compose
 
 ### 1. Clone the repository
+
 ```bash
 git clone https://github.com/<your-username>/payflo.git
 cd payflo
 ```
 
 ### 2. Configure environment variables
+
 Create a `.env` file in the project root:
+
 ```bash
 # MySQL
 MYSQL_URL=jdbc:mysql://localhost:3306/payflo
@@ -466,6 +415,7 @@ MYSQL_PASSWORD=your_password
 
 # Kafka
 KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+KAFKA_GROUP_ID=payflo-consumer-group
 KAFKA_TRUSTED_PACKAGES=com.vishal.payflo.kafka.events
 KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
 
@@ -479,6 +429,12 @@ PAYMENT_TIMEOUT_BUFFER_MINUTES=10
 PAYMENT_STATUS_TTL_HOURS=1
 TRANSACTION_MONITOR_FIXED_DELAY_MS=30000
 
+# Notification hash keys
+PAYMENT_INITIATED_NOTIFICATION_HASH_KEY=notification:payment-initiated
+PAYMENT_COMPLETED_NOTIFICATION_HASH_KEY=notification:payment-completed
+PAYMENT_FAILED_NOTIFICATION_HASH_KEY=notification:payment-failed
+PAYMENT_TIMED_OUT_NOTIFICATION_HASH_KEY=notification:payment-timed-out
+
 # Validation
 VALIDATION_VPA_ALLOWED_HANDLES=okaxis,okhdfcbank,oksbi,okicici,ybl,axl,ibl,paytm,apl,upi,sbi,airtel,kotak,icici
 ```
@@ -486,15 +442,19 @@ VALIDATION_VPA_ALLOWED_HANDLES=okaxis,okhdfcbank,oksbi,okicici,ybl,axl,ibl,paytm
 > **Note:** `KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR` must be explicitly set to `1` on a single-broker setup — omitting it silently breaks all consumer group functionality.
 
 ### 3. Start infrastructure
+
 ```bash
 docker compose up -d
 ```
+
 This brings up Kafka (KRaft mode), MySQL, and Redis.
 
 > **Windows / Git Bash:** prefix Docker commands with `MSYS_NO_PATHCONV=1` to prevent path mangling into Windows-style paths.
 
 ### 4. Create Kafka topics
+
 Topic creation is a deliberate, separate infrastructure step (not part of Compose or `application.yml`), since partition count is fixed at creation and must not change under an in-flight system:
+
 ```bash
 MSYS_NO_PATHCONV=1 docker exec -it <kafka_container_name> \
   /opt/kafka/bin/kafka-topics.sh --create \
@@ -502,19 +462,23 @@ MSYS_NO_PATHCONV=1 docker exec -it <kafka_container_name> \
   --bootstrap-server localhost:9092 \
   --partitions 3 --replication-factor 1
 ```
+
 Repeat for all 9 topics listed in [Kafka Topics](#kafka-topics).
 
 ### 5. Build the application
+
 ```bash
 mvn clean install
 ```
 
 ### 6. Run the application
+
 ```bash
 mvn spring-boot:run
 ```
 
 ### 7. Verify services
+
 ```bash
 # Kafka topics
 MSYS_NO_PATHCONV=1 docker exec -it <kafka_container_name> \
@@ -531,33 +495,31 @@ docker exec -it <mysql_container_name> mysql -u payflo_user -p -e "SHOW TABLES;"
 
 ## Configuration
 
-| Variable                                          | Purpose                                                                                                        |
-|---------------------------------------------------|----------------------------------------------------------------------------------------------------------------|
-| `MYSQL_URL` / `MYSQL_USERNAME` / `MYSQL_PASSWORD` | JDBC connection to the durable transaction store                                                               |
-| `KAFKA_BOOTSTRAP_SERVERS`                         | Kafka broker address                                                                                           |
-| `KAFKA_TRUSTED_PACKAGES`                          | Packages Jackson's Kafka deserializer trusts — must be kept in sync with any package refactor of event classes |
-| `KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR`          | Must be `1` on single-broker local setups                                                                      |
-| `REDIS_HOST` / `REDIS_PORT`                       | Redis connection                                                                                               |
-| `REDIS_PAYMENT_TRANSACTION_HASH_PREFIX`           | Key prefix for the per-transaction status hash                                                                 |
-| `REDIS_PROCESSING_TRANSACTIONS_ZSET_KEY`          | Global key for the timeout-tracking sorted set                                                                 |
-| `REDIS_PAYMENT_TRANSACTION_HASH_STATUS_KEY`       | Hash field name storing the transaction status                                                                 |
-| `PAYMENT_TIMEOUT_BUFFER_MINUTES`                  | Minutes after `startedAt` before a transaction is considered timed out                                         |
-| `PAYMENT_STATUS_TTL_HOURS`                        | Hours a terminal-state Redis entry is retained before self-expiring                                            |
-| `TRANSACTION_MONITOR_FIXED_DELAY_MS`              | Scheduler polling interval for timeout detection                                                               |
-| `VALIDATION_VPA_ALLOWED_HANDLES`                  | Comma-separated list of recognized UPI PSP handles                                                             |
+**MySQL:** `MYSQL_URL`, `MYSQL_USERNAME`, `MYSQL_PASSWORD` — JDBC connection to the durable transaction store.
+
+**Kafka:** `KAFKA_BOOTSTRAP_SERVERS` (broker address), `KAFKA_GROUP_ID` (consumer group), `KAFKA_TRUSTED_PACKAGES` (packages Jackson's deserializer trusts — must be kept in sync with any package refactor of event classes), `KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR` (must be `1` on single-broker local setups).
+
+**Redis:** `REDIS_HOST` / `REDIS_PORT` (connection), `REDIS_PAYMENT_TRANSACTION_HASH_PREFIX` (per-transaction status hash key prefix), `REDIS_PROCESSING_TRANSACTIONS_ZSET_KEY` (global timeout-tracking sorted set key), `REDIS_PAYMENT_TRANSACTION_HASH_STATUS_KEY` (hash field name storing status).
+
+**Timing:** `PAYMENT_TIMEOUT_BUFFER_MINUTES` (minutes after `startedAt` before a transaction is considered timed out), `PAYMENT_STATUS_TTL_HOURS` (hours a terminal-state Redis entry is retained before self-expiring), `TRANSACTION_MONITOR_FIXED_DELAY_MS` (scheduler polling interval).
+
+**Notification hash keys:** `PAYMENT_INITIATED_NOTIFICATION_HASH_KEY`, `PAYMENT_COMPLETED_NOTIFICATION_HASH_KEY`, `PAYMENT_FAILED_NOTIFICATION_HASH_KEY`, `PAYMENT_TIMED_OUT_NOTIFICATION_HASH_KEY` — per-topic Redis hash field names used for the notification dedup flag.
+
+**Validation:** `VALIDATION_VPA_ALLOWED_HANDLES` — comma-separated list of recognized UPI PSP handles.
 
 ---
 
 ## REST APIs
 
 | Method | Endpoint                          | Description                                                                                                                  |
-|--------|-----------------------------------|------------------------------------------------------------------------------------------------------------------------------|
+| ------ | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `GET`  | `/payment/options`                | Returns all available `PaymentType` values                                                                                   |
 | `POST` | `/payment/initiate`               | Accepts a polymorphic payment request (UPI or Card), validates it, fires `payflo.payment-initiated`, returns `transactionId` |
 | `POST` | `/payment/confirm`                | Mocked gateway callback; fires `payflo.payment-received` or `payflo.payment-failed`; returns `202 Accepted` with no body     |
 | `GET`  | `/payment/status/{transactionId}` | Returns current transaction status, read from Redis; `404` if the transaction is unknown or its record has expired           |
 
 **Example — initiate a UPI payment:**
+
 ```bash
 curl -X POST http://localhost:8080/payment/initiate \
   -H "Content-Type: application/json" \
@@ -571,6 +533,7 @@ curl -X POST http://localhost:8080/payment/initiate \
 ```
 
 **Example — confirm a payment:**
+
 ```bash
 curl -X POST http://localhost:8080/payment/confirm \
   -H "Content-Type: application/json" \
@@ -581,6 +544,7 @@ curl -X POST http://localhost:8080/payment/confirm \
 ```
 
 **Example — check status:**
+
 ```bash
 curl http://localhost:8080/payment/status/<uuid>
 ```
@@ -590,20 +554,24 @@ curl http://localhost:8080/payment/status/<uuid>
 ## Testing the Event Flow
 
 ### 1. Start infrastructure and the application
+
 ```bash
 docker compose up -d
 mvn spring-boot:run
 ```
 
 ### 2. Create a payment
+
 ```bash
 curl -X POST http://localhost:8080/payment/initiate \
   -H "Content-Type: application/json" \
   -d '{"amount": 250.00, "paymentDetails": {"type": "UPI", "vpa": "test@oksbi"}}'
 ```
+
 Note the returned `transactionId`.
 
 ### 3. Observe the Kafka event
+
 ```bash
 MSYS_NO_PATHCONV=1 docker exec -it <kafka_container_name> \
   /opt/kafka/bin/kafka-console-consumer.sh \
@@ -612,6 +580,7 @@ MSYS_NO_PATHCONV=1 docker exec -it <kafka_container_name> \
 ```
 
 ### 4. Verify Redis state
+
 ```bash
 docker exec -it <redis_container_name> redis-cli
 HGETALL payflo:payment-transaction:<transactionId>
@@ -619,12 +588,14 @@ ZSCORE payflo:processing-payment-transactions:by-started-at <transactionId>
 ```
 
 ### 5. Verify MySQL
+
 ```bash
 docker exec -it <mysql_container_name> mysql -u payflo_user -p payflo \
-  -e "SELECT * FROM payment_transaction WHERE transaction_id = '<transactionId>';"
+  -e "SELECT * FROM payment_transactions WHERE transaction_id = '<transactionId>';"
 ```
 
 ### 6. Confirm the payment and re-check status
+
 ```bash
 curl -X POST http://localhost:8080/payment/confirm \
   -H "Content-Type: application/json" \
@@ -632,26 +603,33 @@ curl -X POST http://localhost:8080/payment/confirm \
 
 curl http://localhost:8080/payment/status/<transactionId>
 ```
+
 Verify in Redis that the hash's `status` field is now `COMPLETED`, a `TTL` is set on the key, and the transaction has been removed from the sorted set.
 
 ### 7. Trigger and observe the timeout flow
+
 Initiate a payment and simply wait past `PAYMENT_TIMEOUT_BUFFER_MINUTES` without confirming it. Watch the scheduler fire:
+
 ```bash
 MSYS_NO_PATHCONV=1 docker exec -it <kafka_container_name> \
   /opt/kafka/bin/kafka-console-consumer.sh \
   --topic payflo.payment-timed-out \
   --bootstrap-server localhost:9092 --from-beginning
 ```
+
 Then confirm the transaction's Redis status is `TIMED_OUT` and it has been removed from the sorted set.
 
 ### 8. Inspect the Dead Letter Topic
+
 ```bash
 MSYS_NO_PATHCONV=1 docker exec -it <kafka_container_name> \
   /opt/kafka/bin/kafka-console-consumer.sh \
   --topic payflo.DLT \
   --bootstrap-server localhost:9092 --from-beginning
 ```
+
 To manually produce a malformed message and trigger DLT routing:
+
 ```bash
 MSYS_NO_PATHCONV=1 docker exec -it <kafka_container_name> \
   /opt/kafka/bin/kafka-console-producer.sh \
@@ -670,13 +648,17 @@ MSYS_NO_PATHCONV=1 docker exec -it <kafka_container_name> \
 
 **Why Redis for status reads.** Polling `/payment/status` is the highest-frequency read in the system (a typical frontend polls repeatedly until a terminal state). Serving that from MySQL on every call wastes the database's capacity for genuinely durable operations; Redis absorbs the hot path entirely.
 
-**Why idempotent consumers.** Kafka's at-least-once delivery guarantee means every consumer must tolerate redelivery. `EntityManager.persist()` was chosen deliberately over `JpaRepository.save()` specifically because `save()`'s silent select-then-merge behavior for manually-assigned IDs would silently *update* on a duplicate delivery rather than reject it — the opposite of the desired idempotency guarantee.
+**Why idempotent consumers.** Kafka's at-least-once delivery guarantee means every consumer must tolerate redelivery. `EntityManager.persist()` was chosen deliberately over `JpaRepository.save()` specifically because `save()`'s silent select-then-merge behavior for manually-assigned IDs would silently _update_ on a duplicate delivery rather than reject it — the opposite of the desired idempotency guarantee for the initiating insert.
 
 **Why dead-letter topics.** Deserialization failures are permanent, not transient — retrying a malformed payload will never succeed. Routing straight to a DLT avoids infinite retry loops and gives a place to inspect and diagnose bad messages without blocking the partition.
 
 **Why event choreography over central orchestration.** Each consumer reacts to the event in front of it and produces the next event in the chain; there is no central "saga coordinator" deciding what happens next. This keeps each component small and independently testable, at the cost of the overall flow being implicit rather than centrally visible — an accepted tradeoff at this system's scale.
 
 **Why the scheduler publishes events instead of mutating state directly.** Business logic — updating status, removing from the sorted set, updating MySQL — belongs in exactly one place: the consumer that already owns that logic for every other trigger of the same state transition. If the scheduler mutated state directly, timeout-triggered transitions would follow a different code path than gateway-triggered transitions, doubling the surface area for bugs and drift.
+
+**Why atomic ownership claiming instead of just a DB unique constraint.** A DB constraint alone protects against duplicate _inserts_, but the termination race is fundamentally about which of two competing _update_ paths (gateway confirmation vs. scheduler timeout) gets to own a transaction's outcome — and about surviving a crash mid-cascade (MySQL write done, Redis write not yet done). A single atomic Redis check-and-set, executed via Lua, decides ownership and mutates the timeout-tracking structure in one indivisible step, closing both problems at once.
+
+**Why notification delivery is accepted as at-least-once, not exactly-once.** No atomic mechanism can span an external Kafka publish and a local state flag — there will always be a crash window between "notification sent" and "recorded as sent." Rather than chase an unattainable guarantee, payflo deliberately publishes first and marks the flag after, since a duplicate notification is a strictly better failure mode than a payment confirmation the customer never receives.
 
 **Why notifications are event-driven.** Keeping notification dispatch as its own consumer, subscribed to its own topic, means notification delivery can fail, retry, or be swapped for a real provider (SMS/push/email) without touching the core payment state machine at all.
 
@@ -686,25 +668,33 @@ MSYS_NO_PATHCONV=1 docker exec -it <kafka_container_name> \
 
 ## Reliability & Fault Tolerance
 
-| Concern                                                                              | Status                                        | Notes                                                                                                                              |
-|--------------------------------------------------------------------------------------|-----------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
-| Duplicate message handling                                                           | **Implemented**                               | `EntityManager.persist()` + `DataIntegrityViolationException` catch on every consumer                                              |
-| Idempotency (DB layer)                                                               | **Implemented**                               | Unique constraint, atomic at the storage engine                                                                                    |
-| Idempotency (Redis/notification-flag layer)                                          | **Planned (Phase 4.4)**                       | Atomic Redis check-and-set via Lua script                                                                                          |
-| Retry behavior                                                                       | **Implemented (by design, not by mechanism)** | Deserialization failures route to DLT rather than retrying, since retry cannot succeed on a permanently malformed payload          |
-| Consumer recovery                                                                    | **Implemented**                               | Kafka's own consumer-group rebalancing; no custom recovery logic required                                                          |
-| Dead-letter strategy                                                                 | **Implemented**                               | Single shared `payflo.DLT` via `DeadLetterPublishingRecoverer`                                                                     |
-| Redis consistency                                                                    | **Partially implemented**                     | Reads/writes work correctly under single-threaded assumptions; concurrent-redelivery races explicitly out of scope until Phase 4.4 |
-| Database consistency                                                                 | **Implemented**                               | MySQL remains the durable source of truth; unique constraints enforce non-duplication                                              |
-| Event replay                                                                         | **Implemented (by Kafka's nature)**           | Retained topic history allows reprocessing from any offset                                                                         |
-| Timeout handling                                                                     | **Implemented**                               | Sorted-set score-based detection + scheduler + dedicated consumer                                                                  |
-| Partial-write cascade (DB succeeds, Redis write crashes, redelivery double-notifies) | **Planned (Phase 4.4)**                       | Design direction agreed: manual checkpoint/resume pattern with an atomic Redis check-and-set                                       |
+**Duplicate message handling — Implemented.** `EntityManager.persist()` + `DataIntegrityViolationException` catch on the initiating consumer; idempotent `UPDATE` on termination consumers.
+
+**Idempotency, DB layer — Implemented.** Unique constraint, atomic at the storage engine.
+
+**Idempotency, Redis/ownership layer — Implemented.** Atomic Lua check-and-set (`TransactionOwnershipService`) resolves both the cross-consumer termination race and crash-retry redelivery.
+
+**Retry behavior — Implemented by design, not by mechanism.** Deserialization failures route to DLT rather than retrying, since retry cannot succeed on a permanently malformed payload.
+
+**Consumer recovery — Implemented.** Kafka's own consumer-group rebalancing; no custom recovery logic required.
+
+**Dead-letter strategy — Implemented.** Single shared `payflo.DLT` via `DeadLetterPublishingRecoverer`.
+
+**Redis consistency under concurrent redelivery — Implemented.** Atomic ownership claim closes the partial-write and cross-consumer race scenarios that were previously out of scope under the single-threaded assumption.
+
+**Database consistency — Implemented.** MySQL remains the durable source of truth; unique constraints enforce non-duplication on the initiating write.
+
+**Event replay — Implemented, by Kafka's nature.** Retained topic history allows reprocessing from any offset.
+
+**Timeout handling — Implemented.** Sorted-set score-based detection, scheduler, and dedicated consumer, with the same atomic ownership claim protecting against a race against a late gateway confirmation.
+
+**Partial-write cascade (DB succeeds, Redis write crashes, redelivery double-notifies) — Implemented.** MySQL treated as naturally idempotent; Redis transitions made atomic via Lua; notification delivery explicitly accepted as at-least-once with dedup pushed to the notification-consumer edge.
 
 ---
 
 ## Future Improvements
 
-- **Transactional Outbox Pattern** — eliminate the dual-write problem between MySQL and Kafka at its root, rather than the checkpoint/resume mitigation planned for Phase 4.4.
+- **Transactional Outbox Pattern** — eliminate the dual-write problem between MySQL and Kafka at its root, rather than relying on idempotency + atomic Redis ops as the current mitigation.
 - **Saga Pattern (formalized)** — the project already implements choreography-based event flow; a future iteration could introduce explicit saga state tracking for cross-service consistency if payflo were ever split into real services.
 - **Distributed Tracing / OpenTelemetry** — trace a transaction's full journey across REST → Kafka → consumers → Redis/MySQL as a single correlated trace.
 - **Prometheus + Grafana** — consumer lag, DLT volume, and timeout-rate dashboards.
@@ -718,4 +708,4 @@ MSYS_NO_PATHCONV=1 docker exec -it <kafka_container_name> \
 
 ## Conclusion
 
-payflo demonstrates hands-on fluency with the mechanics that separate "used Kafka" from "understands Kafka": partition-keyed ordering, consumer-group semantics, dead-letter routing, and idempotent processing under at-least-once delivery — all built on a self-managed cluster rather than a managed service, and all reasoned through deliberately rather than defaulted into. Beyond messaging, the project reflects disciplined backend engineering more broadly: single-responsibility service/repository layering, centralized and typed configuration, a consistent exception-handling contract, and Redis introduced not as a cache-for-cache's-sake but as a considered architectural response to a specific hot-path problem. What remains — atomic partial-write hardening — is scoped, designed, and explicitly the next and final piece of core implementation work.
+payflo demonstrates hands-on fluency with the mechanics that separate "used Kafka" from "understands Kafka": partition-keyed ordering, consumer-group semantics, dead-letter routing, and idempotent processing under at-least-once delivery — all built on a self-managed cluster rather than a managed service, and all reasoned through deliberately rather than defaulted into. Beyond messaging, the project reflects disciplined backend engineering more broadly: single-responsibility service/repository layering, centralized and typed configuration, a consistent exception-handling contract, atomic partial-write and race-condition hardening via Redis-backed Lua scripts, and Redis introduced not as a cache-for-cache's-sake but as a considered architectural response to a specific hot-path problem.
