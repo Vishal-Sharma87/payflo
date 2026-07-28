@@ -45,8 +45,10 @@ public class PaymentTimedOutConsumer {
     public void consumePaymentTimedOutEvent(PaymentTimedOutEvent paymentTimedOutEvent){
         UUID transactionId = paymentTimedOutEvent.transactionId();
         KafkaTopic topic = paymentTimedOutEvent.topic();
+        log.info("Received payment event for transactionId:{} topic:{}", transactionId, topic);
 
         if (transactionOwnershipService.tryClaim(transactionId, TransactionStatus.TIMED_OUT_PENDING)){
+            log.info("Processing transactionId:{}", transactionId);
             paymentTransactionService.markTransactionStatusTimedOut(transactionId);
 
             String message = notificationMessageTemplateBuilder.build(topic, transactionId);
@@ -54,6 +56,9 @@ public class PaymentTimedOutConsumer {
             eventPublisher.publish(paymentEvent);
 
             redisHashService.finalizeStatus(transactionId, TransactionStatus.TIMED_OUT);
+            log.info("Transaction finalized as TIMED_OUT for transactionId:{}", transactionId);
+        } else {
+            log.warn("Skipping transactionId:{} because ownership was not claimed", transactionId);
         }
 
     }
