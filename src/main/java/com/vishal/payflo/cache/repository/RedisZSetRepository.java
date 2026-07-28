@@ -15,15 +15,6 @@ public class RedisZSetRepository {
         this.zSetOperations = stringRedisTemplate.opsForZSet();
     }
 
-
-    public void put(String zsetKey, long score, String transactionId) {
-        zSetOperations.add(zsetKey, transactionId, score);
-    }
-
-    public void remove(String zsetKey, String transactionId) {
-        zSetOperations.remove(zsetKey, transactionId);
-    }
-
     public Set<String> rangeByScore(String key, long minScore, long maxScore) {
         return zSetOperations.rangeByScore(key, minScore, maxScore);
     }
