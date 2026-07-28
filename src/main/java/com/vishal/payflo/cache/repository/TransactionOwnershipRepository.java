@@ -15,8 +15,8 @@ public class TransactionOwnershipRepository {
         this.redisTemplate = redisTemplate;
     }
 
-    public boolean tryClaim(RedisScript<Long> tryClaimScript, List<String> keys, List<String> arguments) {
-        Long claimed = redisTemplate.execute(tryClaimScript, keys, arguments);
+    public boolean tryClaim(RedisScript<Long> tryClaimScript, List<String> keys, String statusToPass, String member) {
+        Long claimed = redisTemplate.execute(tryClaimScript, keys, statusToPass, member);
 
         return claimed != null && claimed.equals(1L);
     }
