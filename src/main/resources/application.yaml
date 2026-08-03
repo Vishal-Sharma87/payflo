@@ -50,6 +50,16 @@
         notification-payment-failed: "${PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_FAILED}"
         dlt: "${PAYFLO_KAFKA_TOPIC_DLT}"
 
+      groups:
+        payment-initiated: ${PAYFLO_KAFKA_GROUP_PAYMENT_INITIATED}
+        payment-received: ${PAYFLO_KAFKA_GROUP_PAYMENT_RECEIVED}
+        payment-failed: ${PAYFLO_KAFKA_GROUP_PAYMENT_FAILED}
+        payment-timed-out: ${PAYFLO_KAFKA_GROUP_PAYMENT_TIMED_OUT}
+        notification-payment-initiated: ${PAYFLO_KAFKA_GROUP_NOTIFICATION_PAYMENT_INITIATED}
+        notification-payment-completed: ${PAYFLO_KAFKA_GROUP_NOTIFICATION_PAYMENT_COMPLETED}
+        notification-payment-failed: ${PAYFLO_KAFKA_GROUP_NOTIFICATION_PAYMENT_FAILED}
+        notification-payment-timed-out: ${PAYFLO_KAFKA_GROUP_NOTIFICATION_PAYMENT_TIMED_OUT}
+
     payment:
       timeout-buffer-minutes: "${PAYMENT_TIMEOUT_BUFFER_MINUTES}"
 
@@ -99,4 +109,5 @@
       org.springframework.kafka: WARN
       com.vishal.payflo: INFO
       org.hibernate.SQL: DEBUG
+      org.apache.kafka.clients.consumer.internals: WARN
 
