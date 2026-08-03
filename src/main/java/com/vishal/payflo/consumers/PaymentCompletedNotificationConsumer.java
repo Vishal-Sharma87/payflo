@@ -20,7 +20,10 @@ public class PaymentCompletedNotificationConsumer {
     }
 
 
-    @KafkaListener(topics= "payflo.notification.payment-completed", groupId = "payflo-consumer-group")
+    @KafkaListener(
+            topics= "${payflo.kafka.topics.notification-payment-completed}",
+            groupId = "${payflo.kafka.groups.notification-payment-completed}"
+    )
     public void sendPaymentTransactionCompletedNotification(PaymentCompletedNotificationEvent paymentCompletedNotificationEvent){
         UUID transactionId = paymentCompletedNotificationEvent.transactionId();
         KafkaTopic kafkaTopic = paymentCompletedNotificationEvent.topic();
