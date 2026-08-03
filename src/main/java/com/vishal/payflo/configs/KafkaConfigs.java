@@ -1,6 +1,7 @@
 package com.vishal.payflo.configs;
 
 
+import com.vishal.payflo.kafka.PayfloRebalanceListener;
 import com.vishal.payflo.kafka.topics.KafkaTopic;
 import com.vishal.payflo.kafka.topics.KafkaTopicResolver;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -12,6 +13,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.*;
+import org.springframework.kafka.listener.ConsumerAwareRebalanceListener;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
@@ -27,12 +29,15 @@ public class KafkaConfigs {
 
     private final KafkaConnectionProperties kafkaConnectionProperties;
     private final KafkaTopicResolver kafkaTopicResolver;
+    private final ConsumerAwareRebalanceListener consumerAwareRebalanceListener;
 
     public KafkaConfigs(
             KafkaConnectionProperties kafkaConnectionProperties,
-            KafkaTopicResolver kafkaTopicResolver){
+            KafkaTopicResolver kafkaTopicResolver,
+            PayfloRebalanceListener rebalanceListener){
         this.kafkaConnectionProperties = kafkaConnectionProperties;
         this.kafkaTopicResolver = kafkaTopicResolver;
+        this.consumerAwareRebalanceListener = rebalanceListener;
     }
 
 
@@ -56,7 +61,7 @@ public class KafkaConfigs {
     public ConsumerFactory<String, Object> consumerFactory() {
         Map<String, Object> configs = new HashMap<>();
         configs.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaConnectionProperties.bootstrapServers());
-        configs.put(ConsumerConfig.GROUP_ID_CONFIG, kafkaConnectionProperties.groupId());
+        configs.put(ConsumerConfig.GROUP_ID_CONFIG, kafkaConnectionProperties.  groupId());
         configs.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         configs.put(JacksonJsonDeserializer.TRUSTED_PACKAGES, kafkaConnectionProperties.trustedPackages());
 
@@ -82,6 +87,7 @@ public class KafkaConfigs {
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory());
         factory.setCommonErrorHandler(errorHandler);
+        factory.getContainerProperties().setConsumerRebalanceListener(consumerAwareRebalanceListener);
         return factory;
     }
 }
