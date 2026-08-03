@@ -20,7 +20,10 @@ public class PaymentFailedNotificationConsumer {
     }
 
 
-    @KafkaListener(topics = "payflo.notification.payment-failed", groupId = "payflo-consumer-group")
+    @KafkaListener(
+            topics = "${payflo.kafka.topics.notification-payment-failed}",
+            groupId = "${payflo.kafka.groups.notification-payment-failed}"
+    )
     public void sendPaymentTransactionFailedNotification(PaymentFailedNotificationEvent paymentFailedNotificationEvent){
         UUID transactionId = paymentFailedNotificationEvent.transactionId();
         KafkaTopic kafkaTopic = paymentFailedNotificationEvent.topic();
