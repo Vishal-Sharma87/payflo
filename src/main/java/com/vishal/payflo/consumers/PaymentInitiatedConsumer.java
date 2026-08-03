@@ -10,7 +10,7 @@ import com.vishal.payflo.kafka.topics.KafkaTopic;
 import com.vishal.payflo.notifications.NotificationMessageTemplateBuilder;
 import com.vishal.payflo.services.PaymentTransactionService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 
@@ -49,7 +49,7 @@ public class PaymentInitiatedConsumer {
             paymentTransactionService.persistNewTransaction(paymentTransaction);
             log.info("Transaction persisted for transactionId:{}", transactionId);
             finalizeInitiation(paymentInitiatedEvent);
-        } catch (DuplicateKeyException e) {
+        } catch (DataIntegrityViolationException e) {
             log.warn("Duplicate transaction detected, continuing initialization for transactionId:{}", transactionId);
             finalizeInitiation(paymentInitiatedEvent);
         }
