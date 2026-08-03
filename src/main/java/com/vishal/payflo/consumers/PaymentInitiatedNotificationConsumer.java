@@ -19,7 +19,10 @@ public class PaymentInitiatedNotificationConsumer {
     }
 
 
-    @KafkaListener(topics="payflo.notification.payment-initiated", groupId = "payflo-consumer-group")
+    @KafkaListener(
+            topics="${payflo.kafka.topics.notification-payment-initiated}",
+            groupId = "${payflo.kafka.groups.notification-payment-initiated}"
+    )
     public void sendPaymentTransactionInitiatedNotification(PaymentInitiatedNotificationEvent paymentInitiatedNotificationEvent){
         UUID transactionId = paymentInitiatedNotificationEvent.transactionId();
         KafkaTopic kafkaTopic = paymentInitiatedNotificationEvent.topic();
