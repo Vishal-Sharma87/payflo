@@ -16,11 +16,16 @@ public class PaymentTimedOutNotificationConsumer {
 
     private final NotificationPublisher notificationPublisher;
 
-    public PaymentTimedOutNotificationConsumer(NotificationPublisher notificationPublisher){
+    public PaymentTimedOutNotificationConsumer(
+            NotificationPublisher notificationPublisher
+    ){
         this.notificationPublisher = notificationPublisher;
     }
 
-    @KafkaListener(topics="payflo.notification.payment-timed-out", groupId = "payflo-consumer-group")
+    @KafkaListener(
+            topics= "${payflo.kafka.topics.payment-timed-out}",
+            groupId = "${payflo.kafka.groups.notification-payment-timed-out}"
+    )
     public void sendPaymentTransactionTimedOutNotification(PaymentTimedOutNotificationEvent paymentTimedOutNotificationEvent){
         UUID transactionId = paymentTimedOutNotificationEvent.transactionId();
         KafkaTopic kafkaTopic = paymentTimedOutNotificationEvent.topic();
