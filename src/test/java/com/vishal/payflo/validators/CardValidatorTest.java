@@ -1,6 +1,5 @@
-package com.vishal.payflo.vallidators;
+package com.vishal.payflo.validators;
 
-import com.vishal.payflo.validators.CardValidator;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
