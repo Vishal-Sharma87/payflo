@@ -41,7 +41,10 @@ public class PaymentTimedOutConsumer {
     }
 
 
-    @KafkaListener(topics = "payflo.payment-timed-out", groupId = "payflo-consumer.group")
+    @KafkaListener(
+            topics = "${payflo.kafka.topics.payment-timed-out}",
+            groupId = "${payflo.kafka.groups.payment-timed-out}"
+    )
     public void consumePaymentTimedOutEvent(PaymentTimedOutEvent paymentTimedOutEvent){
         UUID transactionId = paymentTimedOutEvent.transactionId();
         KafkaTopic topic = paymentTimedOutEvent.topic();
