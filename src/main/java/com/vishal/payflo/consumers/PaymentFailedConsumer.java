@@ -41,7 +41,10 @@ public class PaymentFailedConsumer {
     }
 
 
-    @KafkaListener(topics = "payflo.payment-failed", groupId="payflo-consumer-group")
+    @KafkaListener(
+            topics = "${payflo.kafka.topics.payment-initiated}",
+            groupId="${payflo.kafka.groups.payment-failed}"
+    )
     public void consumePaymentFailedEvent(PaymentFailedEvent paymentFailedEvent){
         UUID transactionId = paymentFailedEvent.transactionId();
         KafkaTopic topic = paymentFailedEvent.topic();
