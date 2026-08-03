@@ -35,7 +35,10 @@ public class PaymentInitiatedConsumer {
         this.transactionInitializationService = transactionInitializationService;
     }
 
-    @KafkaListener(topics = "payflo.payment-initiated", groupId = "payflo-consumer.group")
+    @KafkaListener(
+            topics = "${payflo.kafka.topics.payment-initiated}",
+            groupId = "${payflo.kafka.groups.payment-initiated}"
+    )
     public void initiateTransaction(PaymentInitiatedEvent paymentInitiatedEvent) {
         UUID transactionId = paymentInitiatedEvent.transactionId();
         KafkaTopic kafkaTopic = paymentInitiatedEvent.topic();
