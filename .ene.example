@@ -135,14 +135,29 @@ KAFKA_TOPIC_PARTITIONS=3
 KAFKA_TOPIC_REPLICATION_FACTOR=1
 
 PAYFLO_KAFKA_TOPIC_PAYMENT_INITIATED=payflo.payment-initiated
-PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_INITIATED=payflo.notification.payment-initiated
 PAYFLO_KAFKA_TOPIC_PAYMENT_RECEIVED=payflo.payment-received
-PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_COMPLETED=payflo.notification.payment-completed
 PAYFLO_KAFKA_TOPIC_PAYMENT_TIMED_OUT=payflo.payment-timed-out
-PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_TIMED_OUT=payflo.notification.payment-timed-out
 PAYFLO_KAFKA_TOPIC_PAYMENT_FAILED=payflo.payment-failed
-PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_FAILED=payflo.notification.payment-failed
 PAYFLO_KAFKA_TOPIC_DLT=payflo.DLT
+
+
+PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_INITIATED=payflo.notification.payment-initiated
+PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_COMPLETED=payflo.notification.payment-completed
+PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_TIMED_OUT=payflo.notification.payment-timed-out
+PAYFLO_KAFKA_TOPIC_NOTIFICATION_PAYMENT_FAILED=payflo.notification.payment-failed
+
+# ****************          Kafka GroupIDs configs           *********************
+
+
+PAYFLO_KAFKA_GROUP_PAYMENT_INITIATED=payflo-payment-initiated-group
+PAYFLO_KAFKA_GROUP_PAYMENT_RECEIVED=payflo-payment-received-group
+PAYFLO_KAFKA_GROUP_PAYMENT_FAILED=payflo-payment-failed-group
+PAYFLO_KAFKA_GROUP_PAYMENT_TIMED_OUT=payflo-payment-timed-out-group
+
+PAYFLO_KAFKA_GROUP_NOTIFICATION_PAYMENT_INITIATED=payflo-notification-payment-initiated-group
+PAYFLO_KAFKA_GROUP_NOTIFICATION_PAYMENT_COMPLETED=payflo-notification-payment-completed-group
+PAYFLO_KAFKA_GROUP_NOTIFICATION_PAYMENT_FAILED=payflo-notification-payment-failed-group
+PAYFLO_KAFKA_GROUP_NOTIFICATION_PAYMENT_TIMED_OUT=payflo-notification-payment-timed-out-group
 
 
 
