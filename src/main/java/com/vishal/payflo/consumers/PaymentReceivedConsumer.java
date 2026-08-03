@@ -40,7 +40,10 @@ public class PaymentReceivedConsumer {
     }
 
 
-    @KafkaListener(topics = "payflo.payment-received", groupId = "payflo-consumer.group")
+    @KafkaListener(
+            topics = "${payflo.kafka.topics.payment-received}",
+            groupId = "${payflo.kafka.groups.payment-received}"
+    )
     public void completeTransaction(PaymentReceivedEvent paymentReceivedEvent) {
         UUID transactionId = paymentReceivedEvent.transactionId();
         KafkaTopic kafkaTopic = paymentReceivedEvent.topic();
