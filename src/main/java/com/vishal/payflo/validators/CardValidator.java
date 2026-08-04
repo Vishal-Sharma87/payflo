@@ -4,6 +4,7 @@ import com.vishal.payflo.advice.enums.ErrorCode;
 import com.vishal.payflo.advice.exceptions.InvalidCardDetailsException;
 import com.vishal.payflo.configs.ExceptionMessagesProperties;
 import com.vishal.payflo.dtos.paymentdetails.CardDetails;
+import com.vishal.payflo.enums.PaymentType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -30,27 +31,32 @@ public class CardValidator implements PaymentValidator<CardDetails> {
         YearMonth expiry = cardDetails.expiry();
 
         if (!cardNumberPattern.matcher(cardNumber).matches()){
-            log.warn("Validation rejected for payment details type:{} errorCode:{}", cardDetails.type(), ErrorCode.INVALID_CARD_NUMBER_FORMAT);
+            logValidationRejectedWarning(ErrorCode.INVALID_CARD_NUMBER_FORMAT);
             throw new InvalidCardDetailsException(exceptionMessages.invalidCardNumberFormat(), ErrorCode.INVALID_CARD_NUMBER_FORMAT);
         }
 
-        if(!cvvPattern.matcher(cvv).matches()){
-            log.warn("Validation rejected for payment details type:{} errorCode:{}", cardDetails.type(), ErrorCode.INVALID_CVV_FORMAT);
-            throw new InvalidCardDetailsException(exceptionMessages.invalidCvvFormat(), ErrorCode.INVALID_CVV_FORMAT);
+        if(isInvalidLuhn(cardNumber)){
+            logValidationRejectedWarning(ErrorCode.INVALID_CARD_NUMBER);
+            throw new InvalidCardDetailsException(exceptionMessages.invalidCardNumber(), ErrorCode.INVALID_CARD_NUMBER);
         }
 
-        if(YearMonth.now().isAfter(expiry)){
-            log.warn("Validation rejected for payment details type:{} errorCode:{}", cardDetails.type(), ErrorCode.EXPIRED_CARD);
+        if(expiry.isBefore(YearMonth.now())){
+            logValidationRejectedWarning(ErrorCode.EXPIRED_CARD);
             throw new InvalidCardDetailsException(exceptionMessages.expiredCard(), ErrorCode.EXPIRED_CARD);
         }
 
-        if(!isValidLuhn(cardNumber)){
-            log.warn("Validation rejected for payment details type:{} errorCode:{}", cardDetails.type(), ErrorCode.INVALID_CARD_NUMBER);
-            throw new InvalidCardDetailsException(exceptionMessages.invalidCardNumber(), ErrorCode.INVALID_CARD_NUMBER);
+        if(!cvvPattern.matcher(cvv).matches()){
+            logValidationRejectedWarning(ErrorCode.INVALID_CVV_FORMAT);
+            throw new InvalidCardDetailsException(exceptionMessages.invalidCvvFormat(), ErrorCode.INVALID_CVV_FORMAT);
         }
+
     }
 
-    public boolean isValidLuhn(String cardNumber) {
+    private void logValidationRejectedWarning(ErrorCode errorCode) {
+        log.warn("Validation rejected for payment details type:{} errorCode:{}", PaymentType.CARD, errorCode);
+    }
+
+    private boolean isInvalidLuhn(String cardNumber) {
         int counter = 0;
         int digitSum = 0;
         int it = cardNumber.length() - 1;
@@ -66,7 +72,7 @@ public class CardValidator implements PaymentValidator<CardDetails> {
             it--;
         }
 
-        return digitSum % 10 == 0;
+        return digitSum % 10 != 0;
     }
 
 }
