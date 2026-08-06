@@ -36,7 +36,7 @@ public class TransactionOwnershipRepositoryTest {
     public void testNotClaimed(){
 
         Mockito.when(redisTemplate.execute(
-                Mockito.any(RedisScript.class),
+                Mockito.<RedisScript<Long>>any(),
                 Mockito.anyList(),
                 Mockito.anyString(),
                 Mockito.anyString())
@@ -51,7 +51,7 @@ public class TransactionOwnershipRepositoryTest {
     public void testClaimed(){
 
         Mockito.when(redisTemplate.execute(
-                Mockito.any(RedisScript.class),
+                Mockito.<RedisScript<Long>>any(),
                 Mockito.anyList(),
                 Mockito.anyString(),
                 Mockito.anyString())
@@ -67,7 +67,7 @@ public class TransactionOwnershipRepositoryTest {
     public void redisReturnsNullFallBackToFalseTest(){
 
         Mockito.when(redisTemplate.execute(
-                Mockito.any(RedisScript.class),
+                Mockito.<RedisScript<Long>>any(),
                 Mockito.anyList(),
                 Mockito.anyString(),
                 Mockito.anyString())
