@@ -11,7 +11,6 @@ import org.mockito.Mock;
 
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.core.script.RedisScript;
 
 import java.util.List;
 import java.util.UUID;
@@ -22,7 +21,6 @@ public class TransactionOwnershipServiceTest {
     private static final String HASH_KEY_PREFIX = "hashKey";
     private static final String STATUS_HASH_KEY_PREFIX = "status";
     private static final String ZSET_KEY_PREFIX = "zsetKey";
-    private static final RedisScript<Long> TRY_CLAIM_SCRIPT = RedisScript.of("dummySCript", Long.class);
 
     private static final UUID TRANSACTION_ID = UUID.randomUUID();
     private static final TransactionStatus INTERMEDIATE_STATUS = TransactionStatus.COMPLETED_PENDING;
@@ -61,8 +59,7 @@ public class TransactionOwnershipServiceTest {
                 Mockito.anyString()
         )).thenReturn(true);
 
-
-        ArgumentCaptor<List<String>> keysCaptor = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<List<String>> keysCaptor = ArgumentCaptor.captor();
 
         ownershipService.tryClaim(TRANSACTION_ID, INTERMEDIATE_STATUS);
 
