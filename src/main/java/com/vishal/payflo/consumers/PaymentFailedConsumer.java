@@ -50,7 +50,8 @@ public class PaymentFailedConsumer {
         KafkaTopic topic = paymentFailedEvent.topic();
         log.info("Received payment event for transactionId:{} topic:{}", transactionId, topic);
 
-        if(transactionOwnershipService.tryClaim(transactionId, TransactionStatus.TIMED_OUT_PENDING)){
+        if(transactionOwnershipService.tryClaim(transactionId, TransactionStatus.FAILED_PENDING)){
+
             log.info("Processing transactionId:{}", transactionId);
             paymentTransactionService.markPaymentTransactionFailed(transactionId);
 
