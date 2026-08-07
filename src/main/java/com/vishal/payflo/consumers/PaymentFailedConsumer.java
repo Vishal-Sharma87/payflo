@@ -20,7 +20,7 @@ import java.util.UUID;
 @Slf4j
 public class PaymentFailedConsumer {
 
-    public final PaymentTransactionService paymentTransactionService;
+    private final PaymentTransactionService paymentTransactionService;
     private final NotificationMessageTemplateBuilder notificationMessageTemplateBuilder;
     private final EventPublisher eventPublisher;
     private final RedisHashService redisHashService;
