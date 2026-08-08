@@ -37,6 +37,7 @@ public class PaymentFailedConsumerTest {
 
     private static final UUID TRANSACTION_ID = UUID.randomUUID();
     private static final PaymentFailedEvent PAYMENT_FAILED_EVENT = new PaymentFailedEvent(TRANSACTION_ID);
+    private static final String NOTIFICATION_MESSAGE = "dummyMessage";
 
     private PaymentFailedConsumer consumer;
 
@@ -53,7 +54,7 @@ public class PaymentFailedConsumerTest {
 
 
     @Test
-    public void testOwnershipClaimedCase(){
+    public void testOwnershipClaimedByPaymentFailedConsumer(){
         Mockito.when(transactionOwnershipService.tryClaim(
                 TRANSACTION_ID,
                 TransactionStatus.FAILED_PENDING
@@ -62,26 +63,24 @@ public class PaymentFailedConsumerTest {
         Mockito.when(notificationMessageTemplateBuilder.build(
                 PAYMENT_FAILED_EVENT.topic(),
                 TRANSACTION_ID
-        )).thenReturn("dummy");
+        )).thenReturn(NOTIFICATION_MESSAGE);
 
         consumer.consumePaymentFailedEvent(PAYMENT_FAILED_EVENT);
 
+        Mockito.verify(paymentTransactionService)
+                .markPaymentTransactionFailed(TRANSACTION_ID);
+
         Mockito.verify(notificationMessageTemplateBuilder)
-                .build(
-                        PAYMENT_FAILED_EVENT.topic(),
-                        TRANSACTION_ID
-                );
+                .build(PAYMENT_FAILED_EVENT.topic(),TRANSACTION_ID);
 
         Mockito.verify(eventPublisher)
-                .publish(new PaymentFailedNotificationEvent(TRANSACTION_ID, "dummy"));
-
-        Mockito.verify(paymentTransactionService).markPaymentTransactionFailed(TRANSACTION_ID);
+                .publish(new PaymentFailedNotificationEvent(TRANSACTION_ID, NOTIFICATION_MESSAGE));
 
         Mockito.verify(redisHashService).finalizeStatus(TRANSACTION_ID, TransactionStatus.FAILED);
     }
 
     @Test
-    public void testOwnershipClaimFailedCase(){
+    public void testOwnershipNotClaimedByPaymentFailedConsumer(){
         Mockito.when(transactionOwnershipService.tryClaim(
                 TRANSACTION_ID,
                 TransactionStatus.FAILED_PENDING
@@ -89,15 +88,14 @@ public class PaymentFailedConsumerTest {
 
         consumer.consumePaymentFailedEvent(PAYMENT_FAILED_EVENT);
 
-        Mockito.verify(notificationMessageTemplateBuilder, Mockito.never())
-                .build(PAYMENT_FAILED_EVENT.topic(),
-                        TRANSACTION_ID);
-
-        Mockito.verify(eventPublisher, Mockito.never())
-                .publish(new PaymentFailedNotificationEvent(TRANSACTION_ID, "dummy"));
-
         Mockito.verify(paymentTransactionService, Mockito.never())
                 .markPaymentTransactionFailed(TRANSACTION_ID);
+
+        Mockito.verify(notificationMessageTemplateBuilder, Mockito.never())
+                .build(PAYMENT_FAILED_EVENT.topic(),TRANSACTION_ID);
+
+        Mockito.verify(eventPublisher, Mockito.never())
+                .publish(new PaymentFailedNotificationEvent(TRANSACTION_ID, NOTIFICATION_MESSAGE));
 
         Mockito.verify(redisHashService, Mockito.never())
                 .finalizeStatus(TRANSACTION_ID, TransactionStatus.FAILED);
