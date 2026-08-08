@@ -3,6 +3,7 @@ package com.vishal.payflo.services;
 import com.vishal.payflo.dtos.paymentdetails.CardDetails;
 import com.vishal.payflo.dtos.paymentdetails.PaymentDetails;
 import com.vishal.payflo.dtos.paymentdetails.UpiDetails;
+import com.vishal.payflo.enums.PaymentType;
 import com.vishal.payflo.validators.CardValidator;
 import com.vishal.payflo.validators.UpiValidator;
 import lombok.extern.slf4j.Slf4j;
@@ -27,12 +28,16 @@ public class PaymentDetailsValidatorService {
         switch (paymentDetails){
             case UpiDetails(String vpa) -> {
                 upiValidator.validate(new UpiDetails(vpa));
-                log.info("Validation passed for payment details type:{}", paymentDetails.type());
+                logValidationPassed(paymentDetails.type());
             }
             case CardDetails(String cardNumber, YearMonth expiry, String cvv) -> {
                 cardValidator.validate(new CardDetails(cardNumber, expiry, cvv));
-                log.info("Validation passed for payment details type:{}", paymentDetails.type());
+                logValidationPassed(paymentDetails.type());
             }
         }
+    }
+
+    private void logValidationPassed(PaymentType type) {
+        log.info("Validation passed for payment details type:{}", type);
     }
 }
